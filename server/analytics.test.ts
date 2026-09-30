@@ -128,3 +128,17 @@ test('collect hides storage failures behind a generic response', async (t) => {
   assert.equal(response.status, 503)
   assert.ok(!(await response.text()).includes('secret'))
 })
+
+test('grouped API functions route by the last path segment and 404 unknown actions', async (t) => {
+  const { routeByLastSegment } = await import('./http.ts')
+  const hits: string[] = []
+  const handler = (name: string) => async (_request: IncomingMessage, response: ServerResponse) => { hits.push(name); response.end() }
+  const server = createServer((request, response) => void routeByLastSegment(request, response, { open: handler('open'), 'test-email': handler('test-email'), toString: handler('x') }))
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()) }))
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  await fetch(`${origin}/api/email/open?t=abc`)
+  await fetch(`${origin}/api/admin/test-email/`)
+  assert.equal((await fetch(`${origin}/api/admin/constructor`)).status, 404)
+  assert.deepEqual(hits, ['open', 'test-email'])
+})

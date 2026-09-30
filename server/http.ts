@@ -121,3 +121,16 @@ export function originAllowed(request: IncomingMessage, allowedOrigins = process
   if (originHost === requestHost) return true
   return (allowedOrigins ?? '').split(',').map((entry) => hostOf(entry.trim())).includes(originHost)
 }
+
+type Handler = (request: IncomingMessage, response: ServerResponse) => Promise<void> | void
+
+/** Dispatches `/api/<group>/<action>` to one handler per action; unknown actions get a 404. */
+export async function routeByLastSegment(request: IncomingMessage, response: ServerResponse, routes: Record<string, Handler>) {
+  const action = new URL(request.url ?? '/', 'http://x.invalid').pathname.replace(/\/$/, '').split('/').pop() ?? ''
+  const handler = Object.hasOwn(routes, action) ? routes[action] : undefined
+  if (!handler) {
+    respond(response, 404, { ok: false, error: 'Not found.' })
+    return
+  }
+  await handler(request, response)
+}
