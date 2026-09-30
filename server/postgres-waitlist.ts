@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import type { Pool, PoolClient } from 'pg'
+import { normalizeEmail } from '../src/lib/email.ts'
 import type { ReferralStatus, SignupContext, WaitlistStore } from './waitlist.ts'
 
 type Database = Pick<Pool, 'connect' | 'query'>
@@ -7,10 +8,10 @@ type CodeRow = { referral_code: string }
 type ProgressRow = CodeRow & { count: number }
 
 const STATUS_QUERY = `
-  SELECT owner.referral_code, COUNT(invitee.phone)::integer AS count
+  SELECT owner.referral_code, COUNT(invitee.referral_code)::integer AS count
   FROM waitlist_signups AS owner
   LEFT JOIN waitlist_signups AS invitee
-    ON invitee.referred_by = owner.referral_code AND invitee.phone <> owner.phone
+    ON invitee.referred_by = owner.referral_code AND invitee.referral_code <> owner.referral_code
   WHERE owner.referral_code = $1
   GROUP BY owner.referral_code
 `
@@ -24,31 +25,33 @@ export function createPostgresWaitlistStore(
   database: Database,
   createCode: () => string = () => randomBytes(24).toString('base64url'),
 ): WaitlistStore {
-  async function add(phone: string, source: string, referralCode?: string, context: SignupContext = {}) {
+  async function add(email: string, source: string, referralCode?: string, context: SignupContext = {}) {
+    const canonicalEmail = normalizeEmail(email)
+    if (!canonicalEmail) throw new Error('The email address is invalid.')
     for (let attempt = 0; attempt < 3; attempt++) {
       const client: PoolClient = await database.connect()
       let retry = false
       try {
         await client.query('BEGIN ISOLATION LEVEL READ COMMITTED')
         const inserted = await client.query<CodeRow>(`
-          INSERT INTO waitlist_signups (phone, source, referral_code, referred_by, consent_version, consented_at, network_hash)
+          INSERT INTO waitlist_signups (email, source, referral_code, referred_by, consent_version, consented_at, network_hash)
           SELECT $1, $2, $3, inviter.referral_code, $5::text, CASE WHEN $5::text IS NULL THEN NULL ELSE now() END, $6
           FROM (SELECT $4::text AS code) AS requested
-          LEFT JOIN waitlist_signups AS inviter ON inviter.referral_code = requested.code AND inviter.phone <> $1
-          ON CONFLICT (phone) DO NOTHING
+          LEFT JOIN waitlist_signups AS inviter ON inviter.referral_code = requested.code AND inviter.email IS DISTINCT FROM $1
+          ON CONFLICT (email) DO NOTHING
           RETURNING referral_code
-        `, [phone, source, createCode(), referralCode ?? null, context.consentVersion ?? null, context.networkHash ?? null])
+        `, [canonicalEmail, source, createCode(), referralCode ?? null, context.consentVersion ?? null, context.networkHash ?? null])
         const added = inserted.rows.length === 1
         if (added) {
           // Copy the visit that produced this signup; ids are optional and unverified hints.
           await client.query('SELECT analytics.attribute_signup($1, $2::uuid, $3::uuid, $4::jsonb)', [
-            phone, context.visitorId ?? null, context.sessionId ?? null, JSON.stringify(context.fallback ?? {}),
+            inserted.rows[0].referral_code, context.visitorId ?? null, context.sessionId ?? null, JSON.stringify(context.fallback ?? {}),
           ])
         }
-        // A concurrent insert may have won the unique phone constraint. A separate
+        // A concurrent insert may have won the unique email constraint. A separate
         // READ COMMITTED statement sees that committed row without rewriting its inviter.
         const owner = added ? inserted.rows[0] : (await client.query<CodeRow>(
-          'SELECT referral_code FROM waitlist_signups WHERE phone = $1', [phone],
+          'SELECT referral_code FROM waitlist_signups WHERE email = $1', [canonicalEmail],
         )).rows[0]
         if (!owner) throw new Error('The waitlist signup could not be read.')
         const progress = (await client.query<ProgressRow>(STATUS_QUERY, [owner.referral_code])).rows[0]
@@ -58,7 +61,8 @@ export function createPostgresWaitlistStore(
       } catch (error) {
         await client.query('ROLLBACK').catch(() => undefined)
         const failure = error as { code?: string, constraint?: string }
-        retry = failure?.code === '23505' && failure.constraint === 'waitlist_referral_code_unique' && attempt < 2
+        retry = failure?.code === '23505' &&
+          ['waitlist_referral_code_unique', 'waitlist_signups_pkey'].includes(failure.constraint ?? '') && attempt < 2
         if (!retry) throw error
       } finally {
         client.release()

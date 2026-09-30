@@ -3,12 +3,14 @@ import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
 import path from 'node:path'
 import type { Connect, Plugin } from 'vite'
+import { normalizeEmail } from '../src/lib/email.ts'
 import { normalizePhone } from '../src/lib/phone.ts'
 import { RequestError, readBody, respond } from './http.ts'
 import { createLocalCollectMiddleware } from './analytics.ts'
 
 type WaitlistEntry = {
-  phone: string
+  email?: string
+  phone?: string
   source: string
   createdAt: string
   referralCode?: string
@@ -33,7 +35,7 @@ export type SignupContext = {
 }
 
 export type WaitlistStore = {
-  add(phone: string, source: string, referralCode?: string, context?: SignupContext): Promise<{ added: boolean, referral: ReferralStatus }>
+  add(email: string, source: string, referralCode?: string, context?: SignupContext): Promise<{ added: boolean, referral: ReferralStatus }>
   referral(code: string): Promise<ReferralStatus | null>
   /** The public waitlist size, including any configured baseline. */
   displayCount?(): Promise<number>
@@ -73,8 +75,8 @@ function isEntry(value: unknown): value is WaitlistEntry {
   if (!value || typeof value !== 'object') return false
   const entry = value as Partial<WaitlistEntry>
   return (
-    typeof entry.phone === 'string' &&
-    normalizePhone(entry.phone) === entry.phone &&
+    ((typeof entry.email === 'string' && normalizeEmail(entry.email) === entry.email && entry.phone === undefined) ||
+      (typeof entry.phone === 'string' && normalizePhone(entry.phone) === entry.phone && entry.email === undefined)) &&
     typeof entry.source === 'string' &&
     entry.source.trim().length > 0 &&
     entry.source.length <= 64 &&
@@ -106,7 +108,8 @@ export function createWaitlistStore(filePath: string) {
       entries = parsed
     }
     const codes = entries.flatMap((entry) => entry.referralCode ? [entry.referralCode] : [])
-    if (new Set(entries.map((entry) => entry.phone)).size !== entries.length || new Set(codes).size !== codes.length) {
+    const identities = entries.map((entry) => entry.email ? `email:${entry.email}` : `phone:${entry.phone}`)
+    if (new Set(identities).size !== entries.length || new Set(codes).size !== codes.length) {
       throw new Error('The local waitlist file has duplicate entries.')
     }
     return entries
@@ -151,13 +154,15 @@ export function createWaitlistStore(filePath: string) {
   }
 
   return {
-    add(phone: string, source: string, referralCode?: string, context?: SignupContext) {
+    add(email: string, source: string, referralCode?: string, context?: SignupContext) {
       return queued(async () => {
+        const canonicalEmail = normalizeEmail(email)
+        if (!canonicalEmail) throw new Error('The email address is invalid.')
         const entries = await readEntries()
-        let entry = entries.find((candidate) => candidate.phone === phone)
+        let entry = entries.find((candidate) => candidate.email === canonicalEmail)
         const added = !entry
         if (!entry) {
-          entry = { phone, source, createdAt: new Date().toISOString() }
+          entry = { email: canonicalEmail, source, createdAt: new Date().toISOString() }
           if (context?.consentVersion) entry.consentVersion = context.consentVersion
           // Attribute only a first signup. Re-submission cannot change an inviter or credit a second signup.
           if (referralCode && entries.some((candidate) => candidate.referralCode === referralCode)) {
@@ -166,13 +171,13 @@ export function createWaitlistStore(filePath: string) {
           entries.push(entry)
         }
         if (!entry.referralCode) {
-          // 192 random bits; public share codes never encode a phone number or a record index.
+          // 192 random bits; public share codes never encode contact details or a record index.
           let code: string
           do {
             code = randomBytes(24).toString('base64url')
           } while (entries.some((candidate) => candidate.referralCode === code))
           entry.referralCode = code
-          // Legacy records gain only a code; original fields and unknown metadata remain intact.
+          // Existing records, including legacy phone records and unknown metadata, remain intact.
           await writeEntries(entries)
         }
         return { added, referral: referralStatus(entries, entry.referralCode) }
@@ -247,12 +252,12 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
         throw new RequestError(400, 'The form could not be read. Please try again.')
       }
       if (!input || typeof input !== 'object' || Array.isArray(input)) {
-        throw new RequestError(400, 'Enter a valid US number, or use + and your country code.')
+        throw new RequestError(400, 'Enter a valid email address.')
       }
-      const { phone: rawPhone, source: rawSource = 'website', referralCode, visitorId, sessionId, consentVersion, turnstileToken } = input as Record<string, unknown>
-      const phone = typeof rawPhone === 'string' ? normalizePhone(rawPhone) : null
-      if (!phone) {
-        throw new RequestError(400, 'Enter a valid US number, or use + and your country code.')
+      const { email: rawEmail, source: rawSource = 'website', referralCode, visitorId, sessionId, consentVersion, turnstileToken } = input as Record<string, unknown>
+      const email = typeof rawEmail === 'string' ? normalizeEmail(rawEmail) : null
+      if (!email || 'phone' in input) {
+        throw new RequestError(400, 'Enter a valid email address.')
       }
       if (typeof rawSource !== 'string' || !rawSource.trim() || rawSource.length > 64) {
         throw new RequestError(400, 'The form source is invalid. Please refresh and try again.')
@@ -272,7 +277,7 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
         ...(typeof sessionId === 'string' && UUID.test(sessionId) ? { sessionId: sessionId.toLowerCase() } : {}),
         ...(typeof consentVersion === 'string' && CONSENT_VERSION.test(consentVersion) ? { consentVersion } : {}),
       }
-      const { added, referral } = await store.add(phone, rawSource.trim(), referralCode, context)
+      const { added, referral } = await store.add(email, rawSource.trim(), referralCode, context)
       respond(response, added ? 201 : 200, { ok: true, referral })
     }
 
@@ -280,7 +285,7 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
       if (error instanceof RequestError) {
         respond(response, error.status, { ok: false, error: error.message })
       } else {
-        // Do not expose phone numbers, file contents, or filesystem paths in responses or logs.
+        // Do not expose contact details, file contents, or filesystem paths in responses or logs.
         respond(response, 503, { ok: false, error: 'The waitlist could not be saved. Please try again.' })
       }
     })
@@ -292,7 +297,7 @@ export function localWaitlistPlugin(): Plugin {
   let middleware: Connect.NextHandleFunction
   let collect: Connect.NextHandleFunction
   return {
-    name: 'local-phone-waitlist',
+    name: 'local-email-waitlist',
     config(config) {
       return {
         server: {

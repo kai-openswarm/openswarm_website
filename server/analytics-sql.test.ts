@@ -60,7 +60,7 @@ test('ingest, signup attribution and the admin API on a real database', { skip }
     await analytics.ingest(batch(V1, S1, [['pageview'], ['section_view', { section: 'top' }], ['waitlist_view', { placement: 'hero' }]],
       { channel: 'Organic Social', source: 'x.com', referrer_domain: 'x.com', utm_campaign: 'launch' }))
     await analytics.ingest(batch(V1, S1, [['scroll', { depth: 50 }], ['waitlist_start', { placement: 'hero' }], ['waitlist_submit', { placement: 'hero', source: 'hero' }], ['engagement', { ms: 42_000 }]]))
-    const signup = await waitlist.add('+12025550123', 'hero', undefined, { visitorId: V1, sessionId: S1, consentVersion: 'sms-2026-09', networkHash: 'n'.repeat(22) })
+    const signup = await waitlist.add('alex@example.com', 'hero', undefined, { visitorId: V1, sessionId: S1, consentVersion: 'email-2026-09-30', networkHash: 'n'.repeat(22) })
     assert.equal(signup.added, true)
     await analytics.ingest(batch(V1, S1, [['waitlist_success', { placement: 'hero', added: true }]]))
     // A later return visit is not a new visitor.
@@ -73,7 +73,7 @@ test('ingest, signup attribution and the admin API on a real database', { skip }
     await analytics.ingest(batch(V2, S1, [['pageview']]))
 
     // An invited signup with no analytics ids still gets location fallback.
-    await waitlist.add('+12025550124', 'nav', signup.referral.code, { networkHash: 'n'.repeat(22), fallback: { country: 'GB', device_type: 'mobile' } })
+    await waitlist.add('friend@example.org', 'nav', signup.referral.code, { networkHash: 'n'.repeat(22), fallback: { country: 'GB', device_type: 'mobile' } })
 
     const sessions = await database.query('SELECT id, pageviews, engaged, converted, is_new_visitor, active_ms, max_scroll FROM analytics.sessions ORDER BY id')
     const byId = Object.fromEntries(sessions.rows.map((row) => [row.id, row]))
@@ -85,13 +85,13 @@ test('ingest, signup attribution and the admin API on a real database', { skip }
     assert.equal(byId[S1B].is_new_visitor, false)
     assert.equal(byId[S2].engaged, false)
 
-    const attribution = await database.query('SELECT phone, channel, utm_campaign, country, device_type, sessions_before FROM analytics.signup_attribution ORDER BY phone')
+    const attribution = await database.query('SELECT a.channel, a.utm_campaign, a.country, a.device_type, a.sessions_before FROM analytics.signup_attribution a JOIN waitlist_signups w USING (referral_code) ORDER BY w.email')
     assert.equal(attribution.rows[0].channel, 'Organic Social')
     assert.equal(attribution.rows[0].utm_campaign, 'launch')
     assert.equal(attribution.rows[1].channel, null)
     assert.equal(attribution.rows[1].country, 'GB')
-    const consent = await database.query("SELECT consent_version, consented_at IS NOT NULL AS consented FROM waitlist_signups WHERE phone = '+12025550123'")
-    assert.deepEqual(consent.rows[0], { consent_version: 'sms-2026-09', consented: true })
+    const consent = await database.query("SELECT consent_version, consented_at IS NOT NULL AS consented FROM waitlist_signups WHERE email = 'alex@example.com'")
+    assert.deepEqual(consent.rows[0], { consent_version: 'email-2026-09-30', consented: true })
 
     // Rate limit windows.
     assert.equal(await analytics.hit('k', 60, 2), true)
@@ -141,9 +141,9 @@ test('ingest, signup attribution and the admin API on a real database', { skip }
     const realtime = await asUser<{ active_visitors: number }>(database, admin, 'SELECT public.admin_realtime()')
     assert.equal(realtime.active_visitors, 2)
 
-    const signups = await asUser<{ total: number, rows: { code: string, phone_masked: string, invites: number }[] }>(database, admin, 'SELECT public.admin_signups($1, $2)', [from, to])
+    const signups = await asUser<{ total: number, rows: { code: string, contact_masked: string, invites: number }[] }>(database, admin, 'SELECT public.admin_signups($1, $2)', [from, to])
     assert.equal(signups.total, 2)
-    assert.ok(signups.rows.every((row) => !row.phone_masked.includes('555012')), 'phones are masked')
+    assert.deepEqual(signups.rows.map((row) => row.contact_masked).sort(), ['a•••@example.com', 'f•••@example.org'], 'contacts are masked')
     const inviter = signups.rows.find((row) => row.code === signup.referral.code)!
     assert.equal(inviter.invites, 1)
 
@@ -151,8 +151,8 @@ test('ingest, signup attribution and the admin API on a real database', { skip }
     assert.equal(Number(referrals.k_factor), 0.5)
     assert.equal(referrals.suspicious.length, 0)
 
-    const phone = await asUser<string>(database, admin, 'SELECT public.admin_reveal_phone($1)', [signup.referral.code])
-    assert.equal(phone, '+12025550123')
+    const contact = await asUser<string>(database, admin, 'SELECT public.admin_reveal_contact($1)', [signup.referral.code])
+    assert.equal(contact, 'alex@example.com')
     const exported = await asUser<unknown[]>(database, admin, 'SELECT public.admin_export_signups($1, $2)', [from, to])
     assert.equal(exported.length, 2)
 
@@ -162,7 +162,7 @@ test('ingest, signup attribution and the admin API on a real database', { skip }
     const settings = await asUser<{ display_count: number, audit: { action: string }[], admins: unknown[] }>(database, admin, 'SELECT public.admin_settings()')
     assert.equal(settings.display_count, 102)
     assert.equal(settings.admins.length, 4)
-    assert.deepEqual(settings.audit.map((entry) => entry.action).sort(), ['export_signups', 'reveal_phone', 'update_setting'])
+    assert.deepEqual(settings.audit.map((entry) => entry.action).sort(), ['export_signups', 'reveal_contact', 'update_setting'])
 
     // Deleting a person removes their signup, attribution and visit history.
     await asUser(database, admin, 'SELECT public.admin_delete_signup($1)', [signup.referral.code])

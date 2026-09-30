@@ -1,16 +1,16 @@
 # Open Swarm website
 
-The marketing website for [Open Swarm](https://openswarm.com), a free AI desktop for Mac. Built with React, TypeScript, and Vite, it combines animated product demonstrations with a phone waitlist and referral flow.
+The marketing website for [Open Swarm](https://openswarm.com), a free AI desktop for Mac. Built with React, TypeScript, and Vite, it combines animated product demonstrations with an email waitlist and referral flow.
 
 <table>
-  <tr><th>Desktop</th><th>Mobile</th></tr>
+  <tr><th>Desktop demo</th><th>Mobile demo</th></tr>
   <tr>
-    <td width="74%"><img src="docs/preview-desktop-2026-09-30.jpg" alt="Current desktop site with the Jarvis headline, phone waitlist, and animated product desktop" /></td>
-    <td width="26%"><img src="docs/preview-mobile-2026-09-30.jpg" alt="Current mobile site with phone signup, referral sharing, and the responsive product scene" /></td>
+    <td width="68%"><img src="docs/preview-demo-desktop-2026-09-30.jpg" alt="Desktop demo with a slimmer translucent sidebar, lighter wallpaper, blue-gray glass panels, and authentic application icons" /></td>
+    <td width="32%"><img src="docs/preview-demo-mobile-2026-09-30.jpg" alt="Mobile demo showing the blue-gray glass app launcher over lighter wallpaper, with authentic Apple and Open Swarm artwork" /></td>
   </tr>
 </table>
 
-Captured from the current website on September 30, 2026, at desktop (1440px) and mobile (390px) widths. Animations are shown in their reduced-motion resting state.
+The current demo uses a slimmer translucent rail, lighter wallpaper, and blue-gray glass panels. The desktop (1280px) and mobile (390px) views show the launcher at 11.8 seconds. See [the glass and app-icon refinement](docs/demo-glass-refinement.md) and [asset provenance](docs/app-assets.md).
 
 <details>
 <summary>View the current illustrated footer</summary>
@@ -23,14 +23,14 @@ Captured from the current website on September 30, 2026, at desktop (1440px) and
 
 - Responsive landing page with product capabilities, four team use cases, an agent marketplace, and mobile navigation.
 - React-based product animations with reduced-motion support, off-screen pausing, and a development scene viewer.
-- Phone signup with country selection, international number validation, and duplicate detection.
+- Email signup with shared form/API validation and duplicate detection.
 - Personal invite links and referral progress. Three unique referred signups earn priority waitlist eligibility.
 - Local JSON storage for development, plus Node API handlers and PostgreSQL (Supabase) migrations for hosted signups.
 - First-party analytics (traffic sources, campaigns, audience, section reach, scroll depth, signup funnel, referrals, Web Vitals, errors) and a private admin dashboard at `/admin/`. See [analytics](docs/analytics.md).
-- Texting-consent wording on the signup form, a recorded consent version per signup, Privacy and Terms pages, and an advertising opt-out that also honors Global Privacy Control.
+- A recorded consent version per signup, Privacy and Terms pages, and an advertising opt-out that also honors Global Privacy Control.
 - Signup protection: origin checks, per-network rate limits, and optional Cloudflare Turnstile.
 
-The product scenes are visual demonstrations. Marketplace actions lead to the waitlist. Priority eligibility is recorded by the backend; SMS delivery, phone ownership verification, and product account activation are not implemented.
+The product scenes are visual demonstrations. Marketplace actions lead to the waitlist. Priority eligibility is recorded by the backend; email delivery, email ownership verification, and product account activation are not implemented.
 
 ## Quick start
 
@@ -45,7 +45,7 @@ npm run dev
 
 Open [localhost:4310](http://localhost:4310). The development port is fixed; stop another process using it before starting the server.
 
-Local signup works without environment variables or a database. Its first successful signup creates `.data/waitlist.json`. This file contains phone numbers, is ignored by Git, and is blocked from browser file requests. Run only one development or preview server against this store at a time.
+Local signup works without environment variables or a database. Its first successful signup creates `.data/waitlist.json`. This file contains email addresses and any retained phone signups, is ignored by Git, and is blocked from browser file requests. Run only one development or preview server against this store at a time.
 
 | Command | Purpose |
 | --- | --- |
@@ -53,7 +53,7 @@ Local signup works without environment variables or a database. Its first succes
 | `npm run build` | Type-check the app and server implementation, then build the frontend into `dist/` |
 | `npm run preview` | Serve the built frontend with the local waitlist API at `http://localhost:4173` by default |
 | `npm run lint` | Run oxlint |
-| `node --experimental-strip-types --test server/*.test.ts` | Run the waitlist, phone validation, analytics, and hosted handler tests |
+| `node --experimental-strip-types --test server/*.test.ts` | Run email, waitlist, retained phone-record validation, analytics, and hosted handler tests |
 
 Run `npm run build` before `npm run preview`. The preview command is for local verification; hosted signups need the API and database described below.
 
@@ -87,19 +87,21 @@ For end-to-end local referral checks, open `http://localhost:4310/?ref=<code>` u
 
 | Endpoint | Request | Behavior |
 | --- | --- | --- |
-| `POST /api/waitlist` | JSON with `phone`, optional `source`, `referralCode`, `consentVersion`, `visitorId`, `sessionId`, `turnstileToken` | Save a new signup or return the existing signup's referral progress |
+| `POST /api/waitlist` | JSON with `email`, optional `source`, `referralCode`, `consentVersion`, `visitorId`, `sessionId`, `turnstileToken` | Save a new signup or return the existing signup's referral progress |
 | `GET /api/waitlist/referral?code=<code>` | A valid share code | Return the current referral count, goal, and priority eligibility |
 | `GET /api/stats` | None | Public waitlist count (admin-set baseline plus real signups), CDN-cached for 5 minutes |
 | `POST /api/collect` | Analytics batch from the browser tracker | Store page and interaction events; returns 204 |
 | `POST /api/admin/invite` | JSON `email` with an admin's Supabase bearer token | Add an admin and create their login |
 
-The form normalizes country-selected numbers to E.164 before submission. The API also validates numbers and deduplicates equivalent formats. A new signup returns HTTP 201; an existing signup returns HTTP 200 without changing its original referral attribution. Success responses contain referral metadata, never phone numbers.
+The form and API trim outer spaces and lowercase accepted email addresses. Dots and plus tags remain intact; provider-specific aliases are not merged. A new signup returns HTTP 201; an existing email returns HTTP 200 without changing its original referral attribution. Success responses contain referral metadata, never email addresses or phone numbers. Phone-only signup requests are no longer accepted.
 
-Each signup receives a random share code. Only new, unique signups attributed to that code count toward the three-referral goal. Repeated submissions and self-referrals do not increase the count. The browser saves share codes for recovery and attribution, not phone numbers.
+Each signup receives a random share code. Only new, unique signups attributed to that code count toward the three-referral goal. Repeated submissions and self-referrals do not increase the count. The browser saves share codes for recovery and attribution, not email addresses or phone numbers.
+
+Existing phone records, share codes, and referral attribution are retained. The phone normalizer remains to validate those stored records; it is not part of the current signup form. Email signups are separate identities, and the migration does not infer email addresses or merge them with earlier phone signups.
 
 Local writes are serialized and saved atomically within one server process. Hosted writes use PostgreSQL transactions and uniqueness constraints. The hosted API returns a generic HTTP 503 if storage is unavailable and never falls back to the local JSON file.
 
-See [referral behavior](docs/referral-backend.md), [phone input](docs/phone-input.md), and [hosted database setup](docs/production-waitlist.md) for implementation details.
+See [referral behavior](docs/referral-backend.md) and [hosted database setup](docs/production-waitlist.md) for current implementation details. The [phone input audit](docs/phone-input.md) is historical.
 
 ## Deployment
 
@@ -107,7 +109,7 @@ Deploy the **repository root**, including `api/`, `server/`, and dependencies. U
 
 The included hosted entry points target Vercel's Node runtime. Before collecting hosted signups:
 
-1. In Supabase, deliberately apply [sql/001_waitlist.sql](sql/001_waitlist.sql) and then [sql/002_analytics.sql](sql/002_analytics.sql).
+1. In Supabase, deliberately apply [sql/001_waitlist.sql](sql/001_waitlist.sql), [sql/002_email_waitlist.sql](sql/002_email_waitlist.sql) and [sql/003_analytics.sql](sql/003_analytics.sql), in that order.
 2. Configure Supabase Auth for the admin dashboard as described in [analytics setup](docs/analytics.md#one-time-setup).
 3. Set the hosting project's server-only variables and the frontend variables above.
 4. Build and deploy the frontend together with all API routes. [vercel.json](vercel.json) holds the routing and security headers.
@@ -136,12 +138,11 @@ The script checks for `DATABASE_URL`, builds the project, verifies both Node API
 ## Project structure
 
 ```text
-admin/index.html             Admin dashboard page (served at /admin/)
+admin/index.html            Admin dashboard page (served at /admin/)
 api/                        Hosted signup, referral, stats, analytics and admin-invite handlers
 privacy/, terms/            Privacy Policy and Terms pages
 server/                     Stores, analytics ingestion, middleware, and tests
-sql/001_waitlist.sql         Waitlist schema migration
-sql/002_analytics.sql        Analytics, attribution, and admin dashboard functions
+sql/                        Waitlist schema, email migration, and analytics/admin migration
 src/
   App.tsx                   Page composition and navigation behavior
   main.tsx                  Entry point and development-only scene viewer
@@ -153,13 +154,13 @@ src/
     ui/                     Shared UI, waitlist form, and referral dialog
   admin/                    Admin dashboard application
   legal/                    Styles and the privacy-choices script for the legal pages
-  lib/                      Phone/referral helpers, links, brands, analytics, and ad tracking
+  lib/                      Email/referral helpers, legacy phone validation, links, brands, analytics, and ad tracking
 public/                     Favicon, illustrations, logos, and icon licenses
 scripts/deploy-preview.sh   Complete preview packaging and deployment
 docs/                       Setup guides, design notes, and verification records
 ```
 
-The frontend uses React 19, TypeScript 6, Vite 8, Tailwind CSS 4, Motion, and Lenis. Phone parsing uses `libphonenumber-js`; hosted storage uses `pg`. Brand marks come from `simple-icons` and the supplied assets. Typography uses Geist, Geist Mono, and Manrope.
+The frontend uses React 19, TypeScript 6, Vite 8, Tailwind CSS 4, Motion, and Lenis. Retained phone-record validation uses `libphonenumber-js`; hosted storage uses `pg`. Brand marks come from `simple-icons` and the supplied assets. Typography uses Geist, Geist Mono, and Manrope.
 
 ### Editing product animations
 
@@ -182,7 +183,7 @@ To add a scene, reuse `Stage`, `useTimeline`, and the timing helpers from `kit.t
 
 - Keep interface controls primarily black and white, with color in imagery and backgrounds. Preserve the established blue section labels and EF purple badge.
 - Reserve first-party orange for the Open Swarm octopus and EF wordmark. Third-party logos retain their original colors.
-- Use real third-party logos from [brands.ts](src/lib/brands.ts). Open Swarm agents and apps may use line icons.
+- Use real third-party logos from [brands.ts](src/lib/brands.ts). Demo applications use original artwork from [app-assets.ts](src/lib/app-assets.ts); reserve line icons for utility controls. Daily Brief has its own illustration because it is created within the demo.
 - Write plain sentences without em dashes in site copy.
 - Give each animation a descriptive `Stage` or `PanelRoot` label and preserve reduced-motion behavior.
 - Check phone widths, keyboard navigation, and horizontal overflow after UI changes.
@@ -195,7 +196,7 @@ To add a scene, reuse `Stage`, `useTimeline`, and the timing helpers from `kit.t
 
 ## Verification and launch notes
 
-Run the build, lint, and test commands above before shipping code changes. Checks on September 30, 2026 passed the build and 27 tests, with one live PostgreSQL integration test skipped. Lint reported existing warnings, and Vite reported a large-bundle advisory.
+Run the build, lint, and test commands above before shipping code changes. The live PostgreSQL integration test is skipped unless `TEST_DATABASE_URL` is supplied. Vite currently reports a large-bundle advisory.
 
 To run the live database test, supply `TEST_DATABASE_URL` through the shell environment or Node's `--env-file=.env.local` option. The plain Node test command does not automatically load Vite environment files. Use an isolated test database with schema-creation permission; the test creates and removes its own temporary schema.
 
@@ -204,7 +205,7 @@ The repository contains the hosted backend implementation. A GitHub push alone d
 Items to confirm before a public launch:
 
 - Connect the intended hosting project and migrated database, and verify the hosted signup/referral flow.
-- Have counsel review the Privacy and Terms pages and the texting-consent wording, and create the `privacy@openswarm.com` mailbox they reference. SMS delivery and phone ownership verification need separate implementation.
+- Have counsel review the Privacy and Terms pages, and create the `privacy@openswarm.com` mailbox they reference. Email delivery and ownership verification need separate implementation.
 - Confirm the waitlist counter baseline (6,327 by default). The hero shows this baseline plus real signups; change it in the dashboard's Settings.
 - Align Problem Validator's advertised source list with its six-agent demonstration and confirm the three “Coming soon” marketplace items.
 - Review illustrative quotes, restaurants, ratings, companies, candidates, amounts, and fixed dates in the demonstrations.

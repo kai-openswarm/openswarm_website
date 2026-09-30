@@ -152,7 +152,7 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
         </div>
         <div className="waitlist-referral-body">
         <p id={descriptionId} className="waitlist-referral-description">
-          {justJoined && !invalidCode && <span className="waitlist-referral-next-step">We’ll text you when early access opens.</span>}
+          {justJoined && !invalidCode && <span className="waitlist-referral-next-step">We’ll email you when early access opens.</span>}
           {referral?.priorityAccess ? 'Three friends joined through your link. You’ve unlocked priority early access.' : 'Invite 3 friends who join the waitlist to unlock priority early access. Open Swarm is 100% free.'}
         </p>
 
@@ -172,10 +172,10 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
         ) : !code ? (
           <div className="waitlist-referral-actions">
             <Button1 className="w-full" onClick={onJoin}>Get my invite link</Button1>
-            <p className="waitlist-referral-note">Already joined? Use the same number to get your link.</p>
+            <p className="waitlist-referral-note">Already joined? Use the same email to get your link.</p>
           </div>
         ) : null}
-        {loadError && <p role="status" className="waitlist-referral-error">{loadError} <button type="button" onClick={() => { setLoading(!referral); setLoadError(''); setRetry((value) => value + 1) }}>Retry</button>{!referral && <button type="button" onClick={onJoin}>Use your phone number</button>}</p>}
+        {loadError && <p role="status" className="waitlist-referral-error">{loadError} <button type="button" onClick={() => { setLoading(!referral); setLoadError(''); setRetry((value) => value + 1) }}>Retry</button>{!referral && <button type="button" onClick={onJoin}>Use your email address</button>}</p>}
         <p className="waitlist-referral-feedback" role="status" aria-live="polite">{feedback}</p>
         </div>
       </div>

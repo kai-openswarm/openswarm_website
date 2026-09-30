@@ -18,9 +18,9 @@ export interface AdminApi {
   engagement(q: RangeQuery): Promise<Engagement>
   realtime(): Promise<Realtime>
   signups(r: Range, search: string, limit: number, offset: number): Promise<SignupsPage>
-  /** Returns the full phone number. The server records the reveal in the audit log. */
-  revealPhone(code: string): Promise<string>
-  /** Full rows including phone numbers. The server records the export in the audit log. */
+  /** Returns the full email (or phone, for legacy signups). The server records the reveal in the audit log. */
+  revealContact(code: string): Promise<string>
+  /** Full rows including email addresses. The server records the export in the audit log. */
   exportSignups(r: Range): Promise<ExportRow[]>
   /** Permanently erases the signup, its attribution and the linked visitor history. */
   deleteSignup(code: string): Promise<void>
@@ -67,7 +67,7 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     realtime: () => rpc('admin_realtime'),
     signups: (r, search, limit, offset) =>
       rpc('admin_signups', { p_from: r.from, p_to: r.to, p_search: search || null, p_limit: limit, p_offset: offset }),
-    revealPhone: (code) => rpc('admin_reveal_phone', { p_code: code }),
+    revealContact: (code) => rpc('admin_reveal_contact', { p_code: code }),
     exportSignups: (r) => rpc('admin_export_signups', { p_from: r.from, p_to: r.to }),
     deleteSignup: (code) => rpc('admin_delete_signup', { p_code: code }),
     referrals: (r) => rpc('admin_referrals', { p_from: r.from, p_to: r.to }),

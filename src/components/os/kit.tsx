@@ -1,12 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { cn, media } from '@/lib/utils'
+import type { AppAssetId } from '@/lib/app-assets'
+import { DemoAppIcon } from './DemoAppIcon'
+import './demo-surfaces.css'
 
 /*
   The Open Swarm desktop, rebuilt as components so the product scenes on the page are
   crisp animation instead of screen recordings. Colours, shapes and labels are measured
-  from Haik's launch videos: the pink and lilac canvas with a dot grid, the mauve dock on
-  the left, dark agent cards with a title pill above them, the voice pill, the app
-  launcher. Every scene is a pure function of one clock `t` (seconds), so a scene can be
+  from Haik's launch videos, with a wallpaper canvas, translucent glass dock, dark agent cards
+  with title pills, a voice pill and an app launcher. Every scene is a pure function
+  of one clock `t` (seconds), so a scene can be
   frozen at any moment with ?t=4.5 in the URL for screenshots.
 */
 
@@ -182,8 +185,8 @@ export function Desktop({ children, className, style, wallpaper = false }: { chi
     >
       {!wallpaper && <>
         {/* Wallpaper only: keep the timeline, camera, cards, cursor and all foreground layers intact. */}
-        <div aria-hidden className="pointer-events-none absolute -inset-[12px]" style={{ backgroundImage: `url("${media('canvas-twilight.webp')}")`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(3px)' }} />
-        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(rgba(110,80,120,0.16) 1px, transparent 1.3px)', backgroundSize: '22px 22px' }} />
+        <div aria-hidden className="pointer-events-none absolute -inset-[12px]" style={{ backgroundImage: `url("${media('canvas-twilight.webp')}")`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(3px) brightness(1.32) saturate(0.82)' }} />
+        <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(160deg,rgba(194,221,246,0.19),rgba(231,235,248,0.08))' }} />
       </>}
       {children}
     </div>
@@ -211,9 +214,8 @@ export function Glyph({ d, className, size = 18 }: { d: string; className?: stri
 }
 
 /**
- * The mauve dock on the left edge of the canvas. `apps` are the coloured buttons at the
- * top (defaults to chat, video, book); `extra` adds more coloured buttons (for example an
- * app the agent just built), `highlight` rings one of them.
+ * Slim frosted navigation with original app artwork. Keep the slot geometry stable:
+ * the hero's pointer and expanding dock are choreographed against these coordinates.
  */
 export function Rail({
   className,
@@ -223,16 +225,16 @@ export function Rail({
 }: {
   className?: string
   style?: CSSProperties
-  extra?: { key: string; bg: string; icon: ReactNode; p?: number }[]
+  extra?: { key: string; asset: AppAssetId; p?: number }[]
   highlight?: string
 }) {
-  const top = [
-    { key: 'chat', bg: 'linear-gradient(160deg,#8b5cf6,#6d3fd9)', icon: <Glyph d={railIcons.chat} /> },
-    { key: 'video', bg: 'linear-gradient(160deg,#f0508a,#c9285e)', icon: <Glyph d={railIcons.video} /> },
-    { key: 'book', bg: 'linear-gradient(160deg,#34c08a,#1d8f63)', icon: <Glyph d={railIcons.book} /> },
+  const top: { key: string; asset: AppAssetId; p?: number }[] = [
+    { key: 'chat', asset: 'messages' },
+    { key: 'video', asset: 'facetime' },
+    { key: 'book', asset: 'books' },
   ]
   return (
-    <div className={cn('absolute flex w-[56px] flex-col items-center gap-[10px] rounded-[18px] py-[12px]', className)} style={{ background: 'rgba(98,82,110,0.92)', boxShadow: '0 12px 30px -14px rgba(60,30,70,0.6), inset 0 0 0 1px rgba(255,255,255,0.08)', ...style }}>
+    <div className={cn('demo-rail absolute ml-[4px] flex w-[48px] flex-col items-center gap-[10px] rounded-[24px] py-[12px]', className)} style={style}>
       {[...top, ...extra].map((b) => {
         const p = 'p' in b && typeof b.p === 'number' ? b.p : 1
         return (
@@ -240,28 +242,27 @@ export function Rail({
             key={b.key}
             className="flex h-[38px] w-[38px] items-center justify-center rounded-[11px] text-white"
             style={{
-              background: b.bg,
-              boxShadow: highlight === b.key ? '0 0 0 2px #fff, 0 0 0 5px rgba(139,92,246,0.45)' : 'inset 0 1px 0 rgba(255,255,255,0.25)',
+              boxShadow: highlight === b.key ? '0 0 0 2px #fff, 0 0 0 5px rgba(71,115,164,0.3)' : undefined,
               opacity: clamp(p * 1.5),
               transform: `scale(${0.6 + 0.4 * easeOut(p)})`,
               height: 38 * clamp(p * 2),
               marginBottom: p < 1 ? -10 * (1 - p) : 0,
             }}
           >
-            {b.icon}
+            <DemoAppIcon asset={b.asset} size={32} />
           </span>
         )
       })}
-      <span className="my-[2px] h-px w-[26px] bg-white/15" />
+      <span className="my-[2px] h-px w-[22px] bg-white/15 shadow-[0_1px_0_rgba(16,32,48,0.12)]" />
       {(['globe', 'calendar', 'store'] as RailIcon[]).map((k) => (
-        <span key={k} className="flex h-[30px] w-[30px] items-center justify-center text-white/60">
-          <Glyph d={railIcons[k]} />
+        <span key={k} className="flex h-[30px] w-[30px] items-center justify-center text-white/85">
+          {k === 'globe' ? <DemoAppIcon asset="safari" size={24} /> : k === 'calendar' ? <DemoAppIcon asset="calendar" size={24} /> : <Glyph d={railIcons[k]} size={17} />}
         </span>
       ))}
-      <span className="my-[2px] h-px w-[26px] bg-white/15" />
+      <span className="my-[2px] h-px w-[22px] bg-white/15 shadow-[0_1px_0_rgba(16,32,48,0.12)]" />
       {(['gear', 'grid'] as RailIcon[]).map((k) => (
-        <span key={k} className="flex h-[30px] w-[30px] items-center justify-center text-white/60">
-          <Glyph d={railIcons[k]} />
+        <span key={k} className="flex h-[30px] w-[30px] items-center justify-center text-white/85">
+          <Glyph d={railIcons[k]} size={17} />
         </span>
       ))}
     </div>
@@ -341,23 +342,23 @@ export function AgentCard({
         <span className="h-[9px] w-[9px] rounded-full bg-black/15" />
         <span className="h-[9px] w-[9px] rounded-full bg-black/15" />
         <span className="h-[9px] w-[9px] rounded-full bg-black/15" />
-        <span className="ml-[4px] flex h-[26px] items-center gap-[8px] rounded-full bg-[#3f353f] pl-[11px] pr-[9px] text-[13px] font-semibold text-white shadow-[0_4px_12px_-6px_rgba(40,20,40,0.6)]">
+        <span className="ml-[4px] flex h-[26px] items-center gap-[8px] demo-title rounded-full pl-[11px] pr-[9px] text-[13px] font-semibold text-white shadow-[0_4px_12px_-6px_rgba(40,20,40,0.6)]">
           <span className="max-w-[230px] truncate">{title}</span>
           <StatusChip status={status} />
         </span>
       </div>
       {/* card */}
-      <div className="relative flex flex-col overflow-hidden rounded-[14px] bg-[#3c353c] shadow-[0_24px_50px_-26px_rgba(50,20,60,0.7),inset_0_0_0_1px_rgba(255,255,255,0.05)]" style={{ height }}>
+      <div className="relative flex flex-col overflow-hidden rounded-[14px] demo-panel" style={{ height }}>
         <div className="flex flex-1 flex-col gap-[12px] overflow-hidden px-[16px] pt-[16px]">
           {prompt && (
-            <div className="ml-auto max-w-[85%] rounded-[10px] bg-[#2d272d] px-[12px] py-[8px] text-[13px] leading-[1.5] text-white" style={rise(promptP, 6, 0)}>
+            <div className="ml-auto max-w-[85%] rounded-[10px] demo-inset px-[12px] py-[8px] text-[13px] leading-[1.5] text-white" style={rise(promptP, 6, 0)}>
               {prompt}
             </div>
           )}
           {children}
         </div>
         {composer && (
-          <div className="m-[10px] mt-0 rounded-[10px] bg-[#2d272d] px-[12px] py-[9px]">
+          <div className="m-[10px] mt-0 rounded-[10px] demo-inset px-[12px] py-[9px]">
             <div className="text-[13px] text-[#cfc6cf]">{status === 'done' ? 'Ask a follow-up...' : 'Agent is working, messages will queue...'}</div>
             <div className="mt-[6px] flex items-center gap-[12px] text-[11px] text-[#8e848e]">
               <span>Claude Opus ⌄</span>
@@ -393,7 +394,7 @@ export function Thinking({ t, className }: { t: number; className?: string }) {
   return (
     <span className={cn('inline-flex gap-[4px]', className)}>
       {[0, 1, 2].map((i) => (
-        <span key={i} className="h-[5px] w-[5px] rounded-full bg-[#b3aab3]" style={{ opacity: 0.3 + 0.7 * Math.max(0, Math.sin((t * 5 - i * 0.7) % (Math.PI * 2))) }} />
+        <span key={i} className="h-[5px] w-[5px] rounded-full bg-[#b3aab3]" style={{ opacity: 0.4 + 0.6 * Math.max(0, Math.sin(t * 5 - i * 0.7)), transform: `scale(${0.86 + 0.14 * Math.max(0, Math.sin(t * 5 - i * 0.7))})` }} />
       ))}
     </span>
   )
@@ -452,23 +453,12 @@ export function BrowserWin({ url, children, className, style, loading = 1, dark 
 
 /* ---------- apps ---------- */
 
-/** A launcher tile: glossy rounded square with the Open Swarm app glyph and a label. */
-export function AppTile({ label, from, to, glyph, size = 64, labelClass, p = 1, style }: { label?: string; from: string; to: string; glyph?: ReactNode; size?: number; labelClass?: string; p?: number; style?: CSSProperties }) {
+/** Original app artwork at a fixed size; preserves the existing tile animation geometry. */
+export function AppTile({ label, asset, size = 64, labelClass, p = 1, style }: { label?: string; asset: AppAssetId; size?: number; labelClass?: string; p?: number; style?: CSSProperties }) {
   return (
     <div className="flex flex-col items-center gap-[7px]" style={{ ...popIn(p), ...style }}>
-      <span
-        className="flex items-center justify-center text-white"
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size * 0.24,
-          background: `linear-gradient(165deg, ${from} 0%, ${to} 100%)`,
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -3px 6px rgba(0,0,0,0.12), 0 8px 16px -10px rgba(0,0,0,0.6)',
-        }}
-      >
-        {glyph ?? <Glyph d={railIcons.grid} size={size * 0.42} className="text-white" />}
-      </span>
-      {label && <span className={cn('max-w-[96px] truncate text-[12px] text-white/85', labelClass)}>{label}</span>}
+      <DemoAppIcon asset={asset} size={size} />
+      {label && <span title={label} className={cn('max-w-[96px] truncate text-[12px] leading-[17px] text-white/90', labelClass)}>{label}</span>}
     </div>
   )
 }
@@ -533,28 +523,6 @@ export function Mark({ brand, size = 28, fill = false, className }: { brand: { p
   )
 }
 
-/** Launcher tile colours sampled from the real app launcher. */
-export const TILE = {
-  violet: ['#b58cff', '#7b4dea'],
-  pink: ['#ff8fc0', '#e0457e'],
-  green: ['#6fe0a8', '#1f9e68'],
-  blue: ['#8cc4ff', '#3a7ff0'],
-  teal: ['#7ee7e0', '#1ba6a0'],
-  red: ['#ff9a8f', '#e0473d'],
-  indigo: ['#a8b2ff', '#5563e8'],
-  slate: ['#b9c0cc', '#6b7485'],
-} as const
-export type TileColor = keyof typeof TILE
-
-/** Glyphs for the apps that show up in both the hero's launcher and the Apps card's, so each app looks the same wherever it appears. */
-export const APP_GLYPH = {
-  brief: 'M10 13.3a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6ZM10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4',
-  crm: 'M7.5 9.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM3 16c.4-2.6 2.2-4 4.5-4s4.1 1.4 4.5 4M13 9.5a2 2 0 1 0 0-4M14.5 12.3c1.4.5 2.3 1.8 2.5 3.7',
-  jobs: 'M9 14a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM12.7 12.7 16.5 16.5',
-  leads: 'M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM10 13.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM10 10h.01',
-  validator: 'M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM7 10.2l2 2 4-4.2',
-}
-
 /**
  * The dark "Applications" panel: count in the header, a search field, then a grid of
  * tiles. `p` (0..1) opens the panel; each tile pops in on its own `ps[i]` when given.
@@ -570,7 +538,7 @@ export function Launcher({
   query = '',
   highlight,
 }: {
-  apps: { label: string; color: TileColor; glyph?: ReactNode }[]
+  apps: { label: string; asset: AppAssetId }[]
   p?: number
   ps?: number[]
   count?: number
@@ -581,12 +549,12 @@ export function Launcher({
   highlight?: number
 }) {
   return (
-    <div className={cn('absolute overflow-hidden rounded-[18px] bg-[#1f1b22]/95 p-[20px] shadow-[0_30px_60px_-24px_rgba(40,10,50,0.7),inset_0_0_0_1px_rgba(255,255,255,0.07)]', className)} style={{ ...popIn(p), transformOrigin: '50% 60%', ...style }}>
+    <div className={cn('demo-launcher absolute overflow-hidden rounded-[18px] p-[20px]', className)} style={{ ...popIn(p), transformOrigin: '50% 60%', ...style }}>
       <div className="flex items-center gap-[10px]">
-        <span className="text-[12px] font-semibold tracking-[0.14em] text-white/55">APPLICATIONS</span>
-        <span className="rounded-full bg-white/10 px-[7px] py-[1px] text-[11px] text-white/60">{count ?? apps.length}</span>
+        <span className="text-[12px] font-semibold tracking-[0.14em] text-white/80">APPLICATIONS</span>
+        <span className="rounded-full bg-white/10 px-[7px] py-[1px] text-[11px] text-white/75 tabular-nums">{count ?? apps.length}</span>
       </div>
-      <div className="mt-[12px] flex h-[34px] items-center gap-[8px] rounded-[9px] bg-white/[0.07] px-[11px] text-[13px] text-white/40">
+      <div className="demo-launcher-search mt-[12px] flex h-[34px] items-center gap-[8px] rounded-[9px] px-[11px] text-[13px]">
         <Glyph d="M9 14a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM12.7 12.7 16.5 16.5" size={14} />
         {query ? <span className="text-white/85">{query}</span> : 'Search your apps'}
       </div>
@@ -594,7 +562,7 @@ export function Launcher({
         {apps.map((a, i) => (
           <div key={a.label + i} className="relative flex justify-center">
             {highlight === i && <span className="absolute -inset-[6px] rounded-[14px] bg-white/10" />}
-            <AppTile label={a.label} from={TILE[a.color][0]} to={TILE[a.color][1]} glyph={a.glyph} size={58} p={ps ? ps[i] ?? 1 : 1} />
+            <AppTile label={a.label} asset={a.asset} size={58} p={ps ? ps[i] ?? 1 : 1} />
           </div>
         ))}
       </div>

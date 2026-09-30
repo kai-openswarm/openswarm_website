@@ -51,7 +51,7 @@ required = [
     'api/waitlist.ts', 'api/waitlist/referral.ts', 'api/collect.ts', 'api/stats.ts', 'api/admin/invite.ts',
     'server/production-waitlist.ts', 'server/postgres-waitlist.ts', 'server/postgres-analytics.ts',
     'server/analytics.ts', 'server/admin-invite.ts', 'server/http.ts', 'server/waitlist.ts',
-    'sql/001_waitlist.sql', 'sql/002_analytics.sql',
+    'sql/001_waitlist.sql', 'sql/002_email_waitlist.sql', 'sql/003_analytics.sql',
 ]
 for name in items + required:
     candidate = root / name
@@ -128,7 +128,7 @@ import re, sys
 from pathlib import Path
 listing = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', Path(sys.argv[1]).read_text())
 if not re.search(r'^\s*(?:[│┃|]\s*)?DATABASE_URL(?:\s|[│┃|]|$)', listing, re.M):
-    raise SystemExit('DATABASE_URL is missing from the target Production environment. Configure the database and apply sql/001_waitlist.sql before deploying. Nothing has been deployed.')
+    raise SystemExit('DATABASE_URL is missing from the target Production environment. Configure the database and apply sql/001_waitlist.sql, sql/002_email_waitlist.sql and sql/003_analytics.sql before deploying. Nothing has been deployed.')
 print('Target Production environment has DATABASE_URL. Its value was not displayed.')
 PY
 

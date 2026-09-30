@@ -1,0 +1,52 @@
+/* The wallpaper supplies the colour; the face tint keeps foreground details legible. */
+.demo-rail {
+  background: linear-gradient(155deg, rgb(235 246 255 / 18%), rgb(209 228 250 / 3%) 46%, rgb(239 247 255 / 10%)), rgb(26 49 73 / 28%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  backdrop-filter: blur(18px) saturate(145%);
+  box-shadow: 0 8px 24px -13px rgb(9 27 48 / 55%), inset 0 0 0 1px rgb(255 255 255 / 23%), inset 1px 1px 0 rgb(255 255 255 / 38%), inset -1px -1px 0 rgb(16 34 56 / 12%);
+}
+
+.demo-panel, .demo-launcher {
+  background: linear-gradient(145deg, rgb(71 84 105 / 78%), rgb(33 42 57 / 86%));
+  -webkit-backdrop-filter: blur(22px) saturate(125%);
+  backdrop-filter: blur(22px) saturate(125%);
+  box-shadow: 0 22px 46px -26px rgb(8 17 29 / 55%), inset 0 0 0 1px rgb(225 238 255 / 17%), inset 0 1px 0 rgb(255 255 255 / 18%);
+}
+
+.demo-launcher {
+  background: linear-gradient(145deg, rgb(82 96 118 / 74%), rgb(35 44 59 / 88%));
+}
+
+.demo-title {
+  background: linear-gradient(150deg, rgb(91 109 145 / 85%), rgb(49 62 91 / 87%));
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 15%), 0 4px 12px -6px rgb(15 32 57 / 45%);
+}
+
+.demo-inset {
+  background: rgb(14 24 41 / 27%);
+  box-shadow: inset 0 0 0 1px rgb(221 236 255 / 9%), 0 1px 0 rgb(255 255 255 / 3%);
+}
+
+.demo-launcher-search {
+  background: rgb(236 244 255 / 10%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%), 0 1px 0 rgb(0 0 0 / 8%);
+  color: rgb(255 255 255 / 72%);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .demo-rail { background: #667d93; }
+  .demo-panel, .demo-launcher { background: #354153; }
+  .demo-title { background: #495d7c; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .demo-rail { background: #667d93; }
+  .demo-panel, .demo-launcher { background: #354153; }
+  .demo-title { background: #495d7c; }
+  .demo-rail, .demo-panel, .demo-launcher, .demo-title {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

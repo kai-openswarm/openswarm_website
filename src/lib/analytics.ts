@@ -1,7 +1,7 @@
 /*
   First-party website analytics. Events go only to this site's /api/collect endpoint
   and are stored in the Open Swarm database; nothing here is shared with ad networks.
-  The visitor id is a random value in this browser's storage. No phone numbers,
+  The visitor id is a random value in this browser's storage. No email addresses,
   form contents or query strings are ever sent.
 */
 
@@ -228,7 +228,7 @@ export function startAnalytics() {
   if (params.get('internal') === '1') write(INTERNAL_KEY, '1')
   if (params.get('internal') === '0') write(INTERNAL_KEY, null)
   started = true
-  // Only the landing URL's campaign parameters are read on the server; the phone form never touches the URL.
+  // Only the landing URL's campaign parameters are read on the server; the signup form never touches the URL.
   landing = window.location.href
   referrer = document.referrer
 

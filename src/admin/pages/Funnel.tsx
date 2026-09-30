@@ -4,14 +4,16 @@ import type { Funnel } from '../types'
 import { DataTable, EmptyState, Panel, QueryView, RankedList, SkeletonRows } from '../ui'
 
 const ERROR_LABELS: Record<string, string> = {
-  invalid_phone: 'Invalid phone number',
+  invalid_email: 'Invalid email address',
+  empty: 'Submitted without an email',
+  invalid_phone: 'Invalid phone number (legacy)',
   rate_limited: 'Rate limited',
   network: 'Network error',
-  unsupported_country: 'Unsupported country',
   captcha: 'Bot check failed',
   '400': 'Rejected request (400)',
   '429': 'Too many requests (429)',
   '500': 'Server error (500)',
+  '503': 'Service unavailable (503)',
   waitlist_error: 'Error (no code)',
   waitlist_fail: 'Failure (no code)',
 }

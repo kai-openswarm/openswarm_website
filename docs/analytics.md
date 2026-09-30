@@ -34,11 +34,10 @@ GET  /api/stats    ── public waitlist count = admin baseline + real signups 
 | `outbound` | Click on a link to another site | `href` (host + path), `label` |
 | `tab` | Use-case tab change | `group`, `tab` |
 | `waitlist_view` | Signup form half visible | `placement` |
-| `waitlist_start` | Phone field first focused | `placement` |
-| `waitlist_country` | Country changed | `country` |
-| `waitlist_error` | Client validation failed | `code` (`invalid_phone`, `empty`), `country` |
-| `waitlist_submit` | Valid number submitted | `placement`, `source`, `country`, `invited` |
-| `waitlist_success` | API accepted the signup | `placement`, `source`, `added` (false for an existing number), `invited` |
+| `waitlist_start` | Email field first focused | `placement` |
+| `waitlist_error` | Client validation failed | `code` (`invalid_email`, `empty`) |
+| `waitlist_submit` | Valid email submitted | `placement`, `source`, `invited` |
+| `waitlist_success` | API accepted the signup | `placement`, `source`, `added` (false for an existing email), `invited` |
 | `waitlist_fail` | API rejected or failed | `placement`, `status` |
 | `referral_open` / `referral_copy` / `referral_share` | Invite dialog actions | `just_joined` on open |
 | `vital` | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) | `name`, `value`, `rating` |
@@ -46,7 +45,7 @@ GET  /api/stats    ── public waitlist count = admin baseline + real signups 
 
 To track a new button, add `data-track="some-name"` to it. To add an event name, add it to `EVENT_NAMES` in `server/analytics.ts`; unknown names are dropped.
 
-A session is **engaged** (not a bounce) after 10 s of visible time, 2+ page views, 50% scroll, any interaction, or a signup. **Signups** in reports are server-confirmed new numbers, not client events.
+A session is **engaged** (not a bounce) after 10 s of visible time, 2+ page views, 50% scroll, any interaction, or a signup. **Signups** in reports are server-confirmed new email addresses, not client events.
 
 ## Channel rules
 
@@ -54,7 +53,7 @@ Applied in order in `classifyTraffic` (`server/analytics.ts`): paid (`utm_medium
 
 ## One-time setup
 
-1. **Database.** In the Supabase SQL editor (or `psql` with the direct connection string), run `sql/001_waitlist.sql` and then `sql/002_analytics.sql`. Both are safe to re-run. The second one seeds the four admin emails and schedules the retention job.
+1. **Database.** In the Supabase SQL editor (or `psql` with the direct connection string), run `sql/001_waitlist.sql`, `sql/002_email_waitlist.sql` and then `sql/003_analytics.sql`. All are safe to re-run. The last one seeds the four admin emails and schedules the retention job.
 2. **Auth.** In Supabase → Authentication:
    - Disable "Allow new users to sign up". Admin logins are created by the allowlist, not by visitors.
    - Set the Site URL to `https://openswarm.com` and add `https://openswarm.com/admin/` (plus any preview domain's `/admin/`) to the redirect URLs.

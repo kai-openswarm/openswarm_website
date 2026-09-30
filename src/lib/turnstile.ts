@@ -38,7 +38,7 @@ function load(): Promise<Turnstile> {
 
 export const turnstileEnabled = !!SITE_KEY
 
-/** Starts loading early (for example when the phone field is focused). */
+/** Starts loading early (for example when the email field is focused). */
 export function prepareTurnstile() {
   if (SITE_KEY) void load().catch(() => undefined)
 }

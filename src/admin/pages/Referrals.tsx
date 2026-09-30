@@ -58,7 +58,7 @@ export function ReferralsPage() {
                 defaultSort={{ key: 'invites', dir: 'desc' }}
                 caption="Referral leaderboard"
                 columns={[
-                  { key: 'phone', label: 'Referrer', render: (r) => <span className="font-mono text-[12.5px]">{r.phone_masked}</span> },
+                  { key: 'contact', label: 'Referrer', render: (r) => <span className="font-mono text-[12.5px]">{r.contact_masked}</span> },
                   { key: 'invites', label: 'Invites', align: 'right', sort: (r) => r.invites, render: (r) => fmtInt(r.invites) },
                   { key: 'range', label: 'In range', align: 'right', sort: (r) => r.invites_in_range, render: (r) => fmtInt(r.invites_in_range) },
                   { key: 'priority', label: 'Priority', render: (r) => (r.priority ? <Badge tone="good">Unlocked</Badge> : <span className="text-ink-3">—</span>) },
@@ -84,7 +84,7 @@ export function ReferralsPage() {
               defaultSort={{ key: 'shared', dir: 'desc' }}
               caption="Possible self-referrals"
               columns={[
-                { key: 'phone', label: 'Referrer', render: (r) => <span className="font-mono text-[12.5px]">{r.phone_masked}</span> },
+                { key: 'contact', label: 'Referrer', render: (r) => <span className="font-mono text-[12.5px]">{r.contact_masked}</span> },
                 { key: 'invites', label: 'Invites', align: 'right', sort: (r) => r.invites, render: (r) => fmtInt(r.invites) },
                 { key: 'shared', label: 'Same network', align: 'right', sort: (r) => r.shared, render: (r) => fmtInt(r.shared) },
                 { key: 'share', label: 'Share', align: 'right', sort: (r) => (r.invites ? r.shared / r.invites : 0), render: (r) => fmtPct(r.invites ? r.shared / r.invites : 0) },

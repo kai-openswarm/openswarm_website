@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { SectionHeading } from './ui/SectionHeading'
 import { AppStack } from './ui/AppIcon'
 import { SalesPanel } from './usecases/SalesPanel'
@@ -86,6 +86,7 @@ const CASES: Case[] = [
 ]
 
 export function UseCases() {
+  const reduce = useReducedMotion()
   const caseFromHash = () => CASES.findIndex((item) => window.location.hash === `#uc-tab-${item.key}`)
   const [i, setI] = useState(() => Math.max(0, caseFromHash()))
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
@@ -137,11 +138,18 @@ export function UseCases() {
                 tabs.current[next]?.focus({ preventScroll: true })
               }}
               className={cn(
-                'relative h-10 w-full rounded-[8px] px-3 text-[14px] transition-colors md:w-auto md:shrink-0 md:px-4',
+                'relative h-10 w-full origin-center rounded-[8px] px-3 text-[14px] transition-[color,background-color,scale] duration-150 ease-out motion-safe:active:scale-[0.985] md:w-auto md:shrink-0 md:px-4',
                 k === i ? 'text-white' : 'text-ink-2 hover:bg-[#f2f2f2] hover:text-ink',
               )}
             >
-              {k === i && <motion.span layoutId="usecase-tab" className="absolute inset-0 rounded-[8px] bg-ink" transition={{ duration: 0.35, ease: EASE }} />}
+              {k === i && (
+                <motion.span
+                  aria-hidden
+                  layoutId={reduce ? undefined : 'usecase-tab'}
+                  className="pointer-events-none absolute inset-0 rounded-[8px] bg-[#253441]/95 bg-[linear-gradient(155deg,rgba(255,255,255,0.14),rgba(255,255,255,0))] shadow-[inset_0_1px_0_rgba(255,255,255,0.26),inset_0_0_0_1px_rgba(255,255,255,0.12),0_2px_5px_rgba(25,42,57,0.12)] backdrop-blur-md"
+                  transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 460, damping: 38, mass: 0.7 }}
+                />
+              )}
               <span className="relative">{x.tab}</span>
             </button>
           ))}
@@ -157,7 +165,14 @@ export function UseCases() {
           <div className="flex flex-col bg-white p-5 sm:p-8">
             <AnimatePresence mode="wait">
               {/* the copy sits at the top and "Works with" at the bottom, so the column is as full as the panel beside it */}
-              <motion.div key={c.key} className="flex flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.3, ease: EASE }}>
+              <motion.div
+                key={c.key}
+                className="flex flex-1 flex-col"
+                initial={reduce ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: reduce ? 1 : 0, y: reduce ? 0 : -4, transition: { duration: reduce ? 0 : 0.12 } }}
+                transition={{ duration: reduce ? 0 : 0.22, ease: EASE }}
+              >
                 <h3 className="text-balance text-[21px] font-medium leading-[1.25] tracking-[-0.02em] text-ink sm:text-[24px]">{c.head}</h3>
                 <p className="mt-3 max-w-[420px] text-[15px] leading-[1.6] text-ink-2">{c.line}</p>
                 <div className="mt-auto pt-5 text-[12px] text-ink-3 sm:pt-8">Works with</div>
@@ -176,7 +191,14 @@ export function UseCases() {
               style={{ backgroundImage: `url("${media(c.wallpaper)}")`, backgroundSize: 'cover', backgroundPosition: c.position, filter: c.treatment }}
             />
             <AnimatePresence mode="wait">
-              <motion.div key={c.key} className="relative" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.3, ease: EASE }}>
+              <motion.div
+                key={c.key}
+                className="relative"
+                initial={reduce ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: reduce ? 1 : 0, y: reduce ? 0 : -4, transition: { duration: reduce ? 0 : 0.12 } }}
+                transition={{ duration: reduce ? 0 : 0.22, ease: EASE }}
+              >
                 <c.Panel prompt={c.prompt} />
               </motion.div>
             </AnimatePresence>

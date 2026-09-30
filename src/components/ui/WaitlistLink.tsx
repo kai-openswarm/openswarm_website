@@ -17,7 +17,7 @@ export function WaitlistLink({ source = 'nav', children, className, onClick, ...
         onClick?.(event)
         if (event.defaultPrevented) return
         window.dispatchEvent(new CustomEvent('os:waitlist', { detail: source }))
-        const target = document.getElementById('waitlist-phone') ?? document.getElementById('waitlist-success')
+        const target = document.getElementById('waitlist-email') ?? document.getElementById('waitlist-success')
         target?.focus({ preventScroll: true })
       }}
     >

@@ -1,5 +1,5 @@
 -- First-party analytics, signup attribution and the admin dashboard API.
--- Apply after 001_waitlist.sql. Written for Supabase Postgres (auth.jwt(), roles
+-- Apply after 001_waitlist.sql and 002_email_waitlist.sql. Written for Supabase Postgres (auth.jwt(), roles
 -- anon/authenticated) and runs on plain PostgreSQL 15+ when those are stubbed.
 --
 -- Tables live in the private `analytics` schema, which PostgREST does not expose.
@@ -36,7 +36,7 @@ END $$;
 CREATE INDEX IF NOT EXISTS waitlist_created_at_idx ON public.waitlist_signups (created_at);
 
 -- Supabase grants new public tables to the API roles by default. RLS already blocks
--- them; revoking as well keeps phone numbers unreachable if a policy is ever added.
+-- them; revoking as well keeps contact details unreachable if a policy is ever added.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
@@ -127,7 +127,7 @@ CREATE INDEX IF NOT EXISTS events_name_time_idx ON analytics.events (name, occur
 -- One row per signup, copied from the session that produced it. Sessions may be
 -- pruned by retention; attribution stays with the signup until the signup is deleted.
 CREATE TABLE IF NOT EXISTS analytics.signup_attribution (
-  phone text PRIMARY KEY REFERENCES public.waitlist_signups (phone) ON DELETE CASCADE ON UPDATE CASCADE,
+  referral_code text PRIMARY KEY REFERENCES public.waitlist_signups (referral_code) ON DELETE CASCADE,
   visitor_id uuid,
   session_id uuid,
   channel text,
@@ -300,13 +300,13 @@ BEGIN
 END $$;
 
 -- Called by the waitlist API inside the signup transaction.
-CREATE OR REPLACE FUNCTION analytics.attribute_signup(p_phone text, p_visitor uuid, p_session uuid, p_fallback jsonb)
+CREATE OR REPLACE FUNCTION analytics.attribute_signup(p_code text, p_visitor uuid, p_session uuid, p_fallback jsonb)
 RETURNS void LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
-  INSERT INTO analytics.signup_attribution (phone, visitor_id, session_id, channel, source, utm_source,
+  INSERT INTO analytics.signup_attribution (referral_code, visitor_id, session_id, channel, source, utm_source,
     utm_medium, utm_campaign, utm_term, utm_content, referrer_domain, landing_path, country, region,
     city, device_type, browser, os, seconds_to_signup, sessions_before)
-  SELECT p_phone, p_visitor, CASE WHEN s.id IS NULL THEN NULL ELSE p_session END,
+  SELECT p_code, p_visitor, CASE WHEN s.id IS NULL THEN NULL ELSE p_session END,
     s.channel, s.source, s.utm_source, s.utm_medium, s.utm_campaign, s.utm_term, s.utm_content,
     s.referrer_domain, s.entry_path,
     coalesce(s.country, p_fallback->>'country'), coalesce(s.region, p_fallback->>'region'),
@@ -317,7 +317,7 @@ BEGIN
   FROM (SELECT 1) one
   LEFT JOIN analytics.sessions s ON s.id = p_session AND s.visitor_id = p_visitor
   LEFT JOIN analytics.visitors v ON v.id = p_visitor
-  ON CONFLICT (phone) DO NOTHING;
+  ON CONFLICT (referral_code) DO NOTHING;
 
   UPDATE analytics.sessions SET converted = true, engaged = true
   WHERE id = p_session AND visitor_id = p_visitor;
@@ -364,10 +364,14 @@ RETURNS void LANGUAGE sql SET search_path = '' AS $$
   INSERT INTO analytics.admin_audit_log (actor, action, detail) VALUES (p_actor, p_action, coalesce(p_detail, '{}'::jsonb))
 $$;
 
-CREATE OR REPLACE FUNCTION analytics.mask_phone(p_phone text)
+-- Email signups show the first character and the domain; legacy phone signups show
+-- the last four digits (country-code lengths vary, and location is reported separately).
+CREATE OR REPLACE FUNCTION analytics.mask_contact(p_email text, p_phone text)
 RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
-  -- Country-code lengths vary, so only the last four digits are shown; location is reported separately.
-  SELECT CASE WHEN p_phone IS NULL THEN NULL ELSE '••• ••• ' || right(p_phone, 4) END
+  SELECT CASE
+    WHEN p_email IS NOT NULL THEN left(p_email, 1) || '•••@' || split_part(p_email, '@', 2)
+    WHEN p_phone IS NOT NULL THEN '••• ••• ' || right(p_phone, 4)
+  END
 $$;
 
 CREATE OR REPLACE FUNCTION analytics.dimensions()
@@ -405,7 +409,7 @@ RETURNS jsonb LANGUAGE sql STABLE SET search_path = '' AS $$
   sig AS (
     SELECT count(*) AS n, count(*) FILTER (WHERE w.referred_by IS NOT NULL) AS referred
     FROM public.waitlist_signups w
-    LEFT JOIN analytics.signup_attribution a ON a.phone = w.phone
+    LEFT JOIN analytics.signup_attribution a ON a.referral_code = w.referral_code
     WHERE w.created_at >= p_from AND w.created_at < p_to
       AND (coalesce(p_filters, '{}'::jsonb) = '{}'::jsonb OR a.session_id IN (SELECT id FROM s))
   ),
@@ -496,7 +500,7 @@ BEGIN
   sig AS (
     SELECT date_trunc(p_bucket, w.created_at AT TIME ZONE p_tz) AS b, count(*) AS signups
     FROM public.waitlist_signups w
-    LEFT JOIN analytics.signup_attribution a ON a.phone = w.phone
+    LEFT JOIN analytics.signup_attribution a ON a.referral_code = w.referral_code
     WHERE w.created_at >= p_from AND w.created_at < p_to
       AND (coalesce(p_filters, '{}'::jsonb) = '{}'::jsonb OR a.session_id IN (SELECT id FROM s))
     GROUP BY 1
@@ -562,7 +566,7 @@ BEGIN
     'steps', jsonb_build_array(
       jsonb_build_object('key', 'visited', 'label', 'Visited', 'sessions', (SELECT count(*) FROM s)),
       jsonb_build_object('key', 'saw_form', 'label', 'Saw the signup form', 'sessions', (SELECT count(DISTINCT session_id) FROM e WHERE name = 'waitlist_view')),
-      jsonb_build_object('key', 'started', 'label', 'Started entering a number', 'sessions', (SELECT count(DISTINCT session_id) FROM e WHERE name = 'waitlist_start')),
+      jsonb_build_object('key', 'started', 'label', 'Started entering an email', 'sessions', (SELECT count(DISTINCT session_id) FROM e WHERE name = 'waitlist_start')),
       jsonb_build_object('key', 'submitted', 'label', 'Submitted', 'sessions', (SELECT count(DISTINCT session_id) FROM e WHERE name = 'waitlist_submit')),
       jsonb_build_object('key', 'joined', 'label', 'Joined (new signup)', 'sessions', (SELECT count(*) FROM s WHERE converted)),
       jsonb_build_object('key', 'shared', 'label', 'Shared an invite', 'sessions', (SELECT count(DISTINCT session_id) FROM e WHERE name IN ('referral_copy', 'referral_share')))
@@ -667,9 +671,10 @@ BEGIN
       a.referrer_domain, a.country, a.region, a.city, a.device_type, a.browser, a.os,
       a.seconds_to_signup, a.sessions_before
     FROM public.waitlist_signups w
-    LEFT JOIN analytics.signup_attribution a ON a.phone = w.phone
+    LEFT JOIN analytics.signup_attribution a ON a.referral_code = w.referral_code
     WHERE w.created_at >= p_from AND w.created_at < p_to
       AND (v_search IS NULL
+        OR w.email ILIKE '%' || v_search || '%'
         OR (v_digits IS NOT NULL AND length(v_digits) >= 3 AND w.phone LIKE '%' || v_digits || '%')
         OR w.source ILIKE '%' || v_search || '%'
         OR a.utm_campaign ILIKE '%' || v_search || '%'
@@ -680,9 +685,10 @@ BEGIN
   SELECT jsonb_build_object(
     'total', (SELECT count(*) FROM base),
     'rows', (SELECT coalesce(jsonb_agg(x ORDER BY x.created_at DESC), '[]'::jsonb) FROM (
-      SELECT b.referral_code AS code, analytics.mask_phone(b.phone) AS phone_masked, b.created_at, b.source AS placement,
+      SELECT b.referral_code AS code, analytics.mask_contact(b.email, b.phone) AS contact_masked,
+        CASE WHEN b.email IS NOT NULL THEN 'email' ELSE 'phone' END AS contact_type, b.created_at, b.source AS placement,
         b.referred_by IS NOT NULL AS was_invited,
-        (SELECT count(*) FROM public.waitlist_signups i WHERE i.referred_by = b.referral_code AND i.phone <> b.phone) AS invites,
+        (SELECT count(*) FROM public.waitlist_signups i WHERE i.referred_by = b.referral_code AND i.referral_code <> b.referral_code) AS invites,
         b.channel, b.traffic_source, b.utm_source, b.utm_medium, b.utm_campaign, b.referrer_domain,
         b.country, b.region, b.city, b.device_type, b.browser, b.os, b.seconds_to_signup, b.sessions_before,
         b.consent_version, b.consented_at
@@ -692,18 +698,18 @@ BEGIN
   RETURN v_result;
 END $$;
 
-CREATE OR REPLACE FUNCTION public.admin_reveal_phone(p_code text)
+CREATE OR REPLACE FUNCTION public.admin_reveal_contact(p_code text)
 RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_actor text := analytics.require_admin();
-  v_phone text;
+  v_contact text;
 BEGIN
-  SELECT phone INTO v_phone FROM public.waitlist_signups WHERE referral_code = p_code;
-  IF v_phone IS NULL THEN
+  SELECT coalesce(email, phone) INTO v_contact FROM public.waitlist_signups WHERE referral_code = p_code;
+  IF v_contact IS NULL THEN
     RAISE EXCEPTION 'Signup not found.' USING ERRCODE = 'P0002';
   END IF;
-  PERFORM analytics.audit(v_actor, 'reveal_phone', jsonb_build_object('code', p_code));
-  RETURN v_phone;
+  PERFORM analytics.audit(v_actor, 'reveal_contact', jsonb_build_object('code', p_code));
+  RETURN v_contact;
 END $$;
 
 CREATE OR REPLACE FUNCTION public.admin_export_signups(p_from timestamptz, p_to timestamptz)
@@ -713,13 +719,13 @@ DECLARE
   v_rows jsonb;
 BEGIN
   SELECT coalesce(jsonb_agg(x ORDER BY x.created_at), '[]'::jsonb) INTO v_rows FROM (
-    SELECT w.phone, w.created_at, w.source AS placement, w.referral_code, w.referred_by, w.consent_version, w.consented_at,
-      (SELECT count(*) FROM public.waitlist_signups i WHERE i.referred_by = w.referral_code AND i.phone <> w.phone) AS invites,
+    SELECT w.email, w.phone, w.created_at, w.source AS placement, w.referral_code, w.referred_by, w.consent_version, w.consented_at,
+      (SELECT count(*) FROM public.waitlist_signups i WHERE i.referred_by = w.referral_code AND i.referral_code <> w.referral_code) AS invites,
       a.channel, a.source AS traffic_source, a.utm_source, a.utm_medium, a.utm_campaign, a.utm_term, a.utm_content,
       a.referrer_domain, a.landing_path, a.country, a.region, a.city, a.device_type, a.browser, a.os,
       a.seconds_to_signup, a.sessions_before
     FROM public.waitlist_signups w
-    LEFT JOIN analytics.signup_attribution a ON a.phone = w.phone
+    LEFT JOIN analytics.signup_attribution a ON a.referral_code = w.referral_code
     WHERE w.created_at >= p_from AND w.created_at < p_to
   ) x;
   PERFORM analytics.audit(v_actor, 'export_signups', jsonb_build_object('from', p_from, 'to', p_to, 'rows', jsonb_array_length(v_rows)));
@@ -731,21 +737,21 @@ CREATE OR REPLACE FUNCTION public.admin_delete_signup(p_code text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_actor text := analytics.require_admin();
-  v_phone text;
+  v_masked text;
   v_visitor uuid;
 BEGIN
-  SELECT w.phone, a.visitor_id INTO v_phone, v_visitor
-  FROM public.waitlist_signups w LEFT JOIN analytics.signup_attribution a ON a.phone = w.phone
+  SELECT analytics.mask_contact(w.email, w.phone), a.visitor_id INTO v_masked, v_visitor
+  FROM public.waitlist_signups w LEFT JOIN analytics.signup_attribution a ON a.referral_code = w.referral_code
   WHERE w.referral_code = p_code;
-  IF v_phone IS NULL THEN
+  IF v_masked IS NULL THEN
     RAISE EXCEPTION 'Signup not found.' USING ERRCODE = 'P0002';
   END IF;
-  DELETE FROM public.waitlist_signups WHERE phone = v_phone;
+  DELETE FROM public.waitlist_signups WHERE referral_code = p_code;
   IF v_visitor IS NOT NULL THEN
     DELETE FROM analytics.events WHERE visitor_id = v_visitor;
     DELETE FROM analytics.visitors WHERE id = v_visitor;
   END IF;
-  PERFORM analytics.audit(v_actor, 'delete_signup', jsonb_build_object('code', p_code, 'masked', analytics.mask_phone(v_phone)));
+  PERFORM analytics.audit(v_actor, 'delete_signup', jsonb_build_object('code', p_code, 'masked', v_masked));
 END $$;
 
 CREATE OR REPLACE FUNCTION public.admin_referrals(p_from timestamptz, p_to timestamptz)
@@ -755,12 +761,12 @@ DECLARE
 BEGIN
   PERFORM analytics.require_admin();
   WITH invites AS (
-    SELECT o.referral_code AS code, o.phone, o.created_at, o.network_hash,
-      count(i.phone) AS invites,
-      count(i.phone) FILTER (WHERE i.created_at >= p_from AND i.created_at < p_to) AS invites_in_range
+    SELECT o.referral_code AS code, analytics.mask_contact(o.email, o.phone) AS contact_masked, o.created_at, o.network_hash,
+      count(i.referral_code) AS invites,
+      count(i.referral_code) FILTER (WHERE i.created_at >= p_from AND i.created_at < p_to) AS invites_in_range
     FROM public.waitlist_signups o
-    LEFT JOIN public.waitlist_signups i ON i.referred_by = o.referral_code AND i.phone <> o.phone
-    GROUP BY o.referral_code, o.phone, o.created_at, o.network_hash
+    LEFT JOIN public.waitlist_signups i ON i.referred_by = o.referral_code AND i.referral_code <> o.referral_code
+    GROUP BY o.referral_code, o.email, o.phone, o.created_at, o.network_hash
   ),
   period AS (SELECT * FROM public.waitlist_signups WHERE created_at >= p_from AND created_at < p_to)
   SELECT jsonb_build_object(
@@ -773,20 +779,20 @@ BEGIN
       (VALUES ('0', 0), ('1', 1), ('2', 2), ('3+', 3)) AS b(label, ord)
       LEFT JOIN (SELECT least(invites, 3) AS ord, count(*) AS n FROM invites GROUP BY 1) x ON x.ord = b.ord),
     'leaderboard', (SELECT coalesce(jsonb_agg(x ORDER BY x.invites DESC, x.joined_at), '[]'::jsonb) FROM (
-      SELECT inv.code, analytics.mask_phone(inv.phone) AS phone_masked, inv.created_at AS joined_at, inv.invites,
+      SELECT inv.code, inv.contact_masked, inv.created_at AS joined_at, inv.invites,
         inv.invites_in_range, inv.invites >= 3 AS priority, a.channel, a.country
-      FROM invites inv LEFT JOIN analytics.signup_attribution a ON a.phone = inv.phone
+      FROM invites inv LEFT JOIN analytics.signup_attribution a ON a.referral_code = inv.code
       WHERE inv.invites > 0 ORDER BY inv.invites DESC, inv.created_at LIMIT 25) x),
     -- Invitees who share a network with their inviter or with each other often indicate self-referral.
     'suspicious', (SELECT coalesce(jsonb_agg(x ORDER BY x.shared DESC), '[]'::jsonb) FROM (
-      SELECT o.referral_code AS code, analytics.mask_phone(o.phone) AS phone_masked,
-        count(i.phone) AS invites,
-        count(i.phone) FILTER (WHERE i.network_hash IS NOT NULL AND (i.network_hash = o.network_hash
-          OR EXISTS (SELECT 1 FROM public.waitlist_signups j WHERE j.referred_by = o.referral_code AND j.phone <> i.phone AND j.network_hash = i.network_hash))) AS shared
-      FROM public.waitlist_signups o JOIN public.waitlist_signups i ON i.referred_by = o.referral_code AND i.phone <> o.phone
-      GROUP BY o.referral_code, o.phone
-      HAVING count(i.phone) FILTER (WHERE i.network_hash IS NOT NULL AND (i.network_hash = o.network_hash
-          OR EXISTS (SELECT 1 FROM public.waitlist_signups j WHERE j.referred_by = o.referral_code AND j.phone <> i.phone AND j.network_hash = i.network_hash))) >= 2
+      SELECT o.referral_code AS code, analytics.mask_contact(o.email, o.phone) AS contact_masked,
+        count(i.referral_code) AS invites,
+        count(i.referral_code) FILTER (WHERE i.network_hash IS NOT NULL AND (i.network_hash = o.network_hash
+          OR EXISTS (SELECT 1 FROM public.waitlist_signups j WHERE j.referred_by = o.referral_code AND j.referral_code <> i.referral_code AND j.network_hash = i.network_hash))) AS shared
+      FROM public.waitlist_signups o JOIN public.waitlist_signups i ON i.referred_by = o.referral_code AND i.referral_code <> o.referral_code
+      GROUP BY o.referral_code, o.email, o.phone
+      HAVING count(i.referral_code) FILTER (WHERE i.network_hash IS NOT NULL AND (i.network_hash = o.network_hash
+          OR EXISTS (SELECT 1 FROM public.waitlist_signups j WHERE j.referred_by = o.referral_code AND j.referral_code <> i.referral_code AND j.network_hash = i.network_hash))) >= 2
       LIMIT 25) x)
   ) INTO v_result;
   RETURN v_result;

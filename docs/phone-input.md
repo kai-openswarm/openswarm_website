@@ -1,5 +1,7 @@
 # Phone input and storage audit
 
+> Historical audit. New signups now use [email](email-input.md). Phone normalization remains only to validate preserved legacy records.
+
 ## Accepted input
 
 The shared phone normalizer previously rejected every value that did not begin with `+`. That prevented familiar US input from reaching the phone-number parser.

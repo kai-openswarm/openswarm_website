@@ -130,7 +130,7 @@ function AgentPill({ done, style }: { done: number; style?: CSSProperties }) {
       <span className="h-[8px] w-[8px] rounded-full bg-black/15" />
       <span className="h-[8px] w-[8px] rounded-full bg-black/15" />
       <span className="h-[8px] w-[8px] rounded-full bg-black/15" />
-      <span className="ml-[3px] flex h-[28px] items-center gap-[9px] rounded-full bg-[#3f353f] pl-[12px] pr-[8px] text-[13.5px] font-semibold text-white shadow-[0_6px_16px_-8px_rgba(40,20,40,0.7)]">
+      <span className="ml-[3px] flex h-[28px] items-center gap-[9px] demo-title rounded-full pl-[12px] pr-[8px] text-[13.5px] font-semibold text-white shadow-[0_6px_16px_-8px_rgba(40,20,40,0.7)]">
         Best food in Berkeley
         <span className="relative flex h-[18px] w-[54px] items-center justify-end">
           {done < 1 && (
@@ -346,8 +346,8 @@ function Results({ t, fade }: { t: number; fade: number }) {
 /** The compact opening card body: the ask and the first step. */
 function OpeningBody({ t, style }: { t: number; style: CSSProperties }) {
   return (
-    <div className="absolute w-[300px] rounded-[14px] bg-[#3c353c] p-[14px] shadow-[0_24px_50px_-26px_rgba(50,20,60,0.7),inset_0_0_0_1px_rgba(255,255,255,0.05)]" style={style}>
-      <div className="ml-auto w-fit rounded-[10px] bg-[#2d272d] px-[12px] py-[7px] text-[13px] leading-[1.45] text-white">Find the best food in Berkeley</div>
+    <div className="absolute w-[300px] rounded-[14px] demo-panel p-[14px]" style={style}>
+      <div className="ml-auto w-fit rounded-[10px] demo-inset px-[12px] py-[7px] text-[13px] leading-[1.45] text-white">Find the best food in Berkeley</div>
       <div className="mt-[12px] flex items-center gap-[8px] text-[13px]">
         <Glyph d={GLOBE} size={15} className="text-[#b085f5]" />
         <span className="font-medium text-[#c09cf9]">Opening 6 browsers</span>

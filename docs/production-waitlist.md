@@ -1,6 +1,6 @@
 # Hosted waitlist backend
 
-The repository now includes a production API backed by PostgreSQL. The code and migration are prepared; **no database has been provisioned, connected, migrated or deployed** in this workspace. Local development still uses the existing private JSON store.
+The production API stores email signups in PostgreSQL while retaining legacy phone signups and their referral links. The code and migrations are prepared; **no live database was provisioned, connected, migrated or deployed for this update**. Local development continues to use the private JSON store.
 
 ## Entry points and configuration
 
@@ -8,57 +8,56 @@ The repository now includes a production API backed by PostgreSQL. The code and 
 | --- | --- |
 | `api/waitlist.ts` | Vercel Node handler for `POST /api/waitlist` |
 | `api/waitlist/referral.ts` | Vercel Node handler for `GET /api/waitlist/referral?code=…` |
-| `server/production-waitlist.ts` | Small shared connection pool, hosted request adapter and safe failure handling |
-| `server/postgres-waitlist.ts` | Host-neutral PostgreSQL implementation of the existing waitlist store contract |
-| `sql/001_waitlist.sql` | Explicit database migration; never executed by an incoming signup request |
-| `DATABASE_URL` | Required server-only PostgreSQL connection URL, including the provider's TLS settings |
-| `VITE_PUBLIC_SITE_URL` | Optional public frontend origin for share links; use the deployed website's URL |
-| `TEST_DATABASE_URL` | Optional isolated database used only by the real PostgreSQL integration test |
+| `server/production-waitlist.ts` | Shared connection pool, hosted request adapter and safe failure handling |
+| `server/postgres-waitlist.ts` | PostgreSQL implementation of the email waitlist store |
+| `sql/001_waitlist.sql` | Original table, referral constraints and private RLS configuration |
+| `sql/002_email_waitlist.sql` | Additive email migration that retains legacy contacts and attribution |
+| `DATABASE_URL` | Required server-only PostgreSQL URL with the provider's TLS settings |
+| `VITE_PUBLIC_SITE_URL` | Optional public frontend origin for share links |
+| `TEST_DATABASE_URL` | Optional isolated database for the real PostgreSQL integration test |
 
-Vercel's Node runtime supports function files in `api/` and its request/response handler shape. The adapter handles both a raw Node request stream and Vercel's pre-parsed JSON body, while applying the same input validation, 4KB limit and response contract. [Vercel Node runtime](https://vercel.com/docs/functions/runtimes/node-js)
+The adapter accepts raw Node request streams and Vercel's pre-parsed JSON while applying the same email validation, 4KB limit and public response contract. Missing configuration, unavailable storage or an unapplied migration returns a generic HTTP 503. The hosted handler never falls back to local JSON or reports signup success before a database commit.
 
-Missing `DATABASE_URL`, an unavailable database, or an unapplied migration returns a generic HTTP 503. The hosted handler **does not fall back to local JSON storage** and never reports success before PostgreSQL commits the signup.
+## Migration and launch order
 
-## Migration and launch steps
-
-1. Choose/create a PostgreSQL database in the intended hosting account. For an existing database, review the table name and migration before applying it.
-2. Apply `sql/001_waitlist.sql` deliberately using the provider's SQL console or a trusted PostgreSQL client. For example, with the secret supplied through the environment:
+1. Review both migrations against the intended database. Apply them deliberately with the provider's SQL console or a trusted PostgreSQL client. On a fresh database, apply **001 then 002**:
 
    ```sh
    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/001_waitlist.sql
-   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/002_analytics.sql
+   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/002_email_waitlist.sql
+   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/003_analytics.sql
    ```
 
-   `002_analytics.sql` adds the consent record and network hash to signups, the private `analytics` schema, and the admin dashboard functions. The signup API requires it: new signups record attribution in the same transaction. See [analytics](analytics.md).
+   `003_analytics.sql` adds the consent record and network hash to signups, the private `analytics` schema, and the admin dashboard functions. The signup API requires it: new signups record attribution in the same transaction. See [analytics](analytics.md).
 
-3. Set the hosting project's server-only `DATABASE_URL`. Do not prefix this secret with `VITE_`. Use the provider's recommended pooled/TLS connection string where applicable; the code does not disable certificate verification.
-4. The migration creates a private table with row-level security and no public policy. The server connection should use the table owner, or an explicitly configured server role with a matching private RLS policy. A browser/anonymous key is not a database credential for this API.
-5. Deploy the **repository root**, including `api/`, `server/` and dependencies. For a dedicated noindex preview project, the updated `scripts/deploy-preview.sh` stages the full project, checks target database configuration, verifies both built Node API functions and deploys the complete prebuilt artifact. See [deploy-preview.md](deploy-preview.md). Do not deploy a copy of `dist/` alone.
-6. Set `VITE_PUBLIC_SITE_URL` to the intended public origin if share links should use a canonical domain, then rebuild the frontend.
-7. Verify a reserved test signup, repeated equivalent formatting, an invite signup, and referral progress against the deployed endpoint before collecting public signups. Remove only those known test entries afterward through the database administrator.
+   If 001 is already applied, apply 002 before deploying the email API. Both migrations support reapplication. Requests and deploy scripts never apply them automatically.
 
-Existing `.data/waitlist.json` records remain untouched and private. If those local records should move to production, import them deliberately before launch while retaining their referral codes and original inviter relationships. The static build must never contain the local signup file. No silent upload or automatic import is performed by this code.
+2. Migration 002 adds a nullable email column, preserves unique phone values, and moves the primary key to the existing unique referral code so new entries can omit a phone. A check requires exactly one contact type. Canonical emails are unique; referral foreign keys, first-attribution data, timestamps, source values, code uniqueness, no-self-referral checks and RLS stay intact. No record is deleted or matched across contact types. The original phone API can still insert valid legacy rows during the migration-first deployment transition.
+3. Set the hosting project's server-only `DATABASE_URL`; never prefix credentials with `VITE_`. Use the provider's pooled/TLS connection string where applicable. The server uses the table owner or an explicitly configured private server role and matching RLS policy; browser/anonymous credentials must not access this table.
+4. Deploy the repository root, including `api/`, `server/`, `sql/` and dependencies. The [preview deployment script](deploy-preview.md) stages the full project and checks both Node functions. Deploying `dist/` alone omits the API.
+5. Set `VITE_PUBLIC_SITE_URL` if invite links need a canonical origin, then rebuild the frontend.
+6. Before opening public collection, verify a reserved email signup, a case/space variant, an invitation from a legacy code, exactly-three progress and an old phone request returning 400. Remove only known test records through the database administrator afterward.
+
+Private local `.data/waitlist.json` records remain untouched. Moving them to production requires a deliberate import retaining codes and inviter relationships. This implementation does not silently import or upload local contacts.
 
 ## Transaction and referral behavior
 
-The schema enforces unique normalized E.164 phones and unique random 32-character share codes, validates basic field shape, and links each inviter through a foreign key. New inserts use `ON CONFLICT (phone) DO NOTHING`; subsequent reads use the same transaction's next READ COMMITTED statement to see a concurrent winner. An existing phone keeps its original source, code and inviter. Unknown invite codes join without attribution, and self-referrals cannot be stored.
+The API accepts `email`, optional `source` and optional `referralCode`; requests containing `phone` receive HTTP 400. Both stores call the shared [email normalizer](../src/lib/email.ts), so case and outer spaces cannot create extra identities. Dots and plus tags remain intact.
 
-Every signup transaction uses one checked-out PostgreSQL client from beginning through commit/rollback, following node-postgres transaction guidance. Connections are released even when a request fails. [node-postgres transactions](https://node-postgres.com/features/transactions)
+New PostgreSQL inserts use `ON CONFLICT (email) DO NOTHING`. The following READ COMMITTED statement sees a concurrent winning row without changing its source, code or inviter. Unknown invitation codes join without attribution. Each transaction uses one checked-out client and releases it after commit or rollback. Rare referral-code collisions retry a fresh transaction and code, up to a bounded limit.
 
-Referral counts come from durable attributed rows. Three unique referred phone numbers set `priorityAccess: true` in both signup and progress responses. The API exposes only code, count, goal and eligibility, never phone numbers or database errors. Codes use 192 random bits. Rare share-code collisions retry with a fresh transaction/code, with a bounded retry limit.
+Progress counts attributed rows by referral code, including both old phone records and email records. Three unique attributed records set `priorityAccess: true`. Responses contain only code, count, goal and eligibility; contacts, database errors and credentials never appear in public responses.
 
-The implementation records priority eligibility; it does not send SMS, verify number ownership or provision early-access accounts. Those services have not been connected.
+This records eligibility only. Email delivery, ownership verification and product account activation are not connected. A new email cannot be automatically linked to an old phone signup without proving that they identify the same person.
 
-## Tests and limits of verification
+## Tests and verification limits
 
 ```sh
 node --experimental-strip-types --test server/*.test.ts
 ```
 
-Current result: **27 passing tests and one explicitly skipped live PostgreSQL test**. Tests cover country-selected US/international normalization, local durability and privacy, referral deduplication, SQL parameter binding, transaction rollback/release, duplicate winner handling, collision retries, hosted parsed request bodies, body limits, safe errors, and missing database configuration. TypeScript covers production server/API files; a separate standalone TypeScript check covers the test files.
+The current isolated suite passes **29 tests**, with one live PostgreSQL test explicitly skipped. It covers email normalization, legacy phone validation, local durability and mixed-contact referral persistence, concurrency, privacy, SQL parameter binding, transaction rollback/release, duplicate handling, code collision recovery and hosted error behavior.
 
-There is no local `postgres`, `psql`, or Docker executable and no `TEST_DATABASE_URL` in this environment. An additional temporary PGlite audit exercised the actual migration/SQL against embedded PostgreSQL: migration idempotency, signup/deduplication, first attribution, exactly-three referral unlock, share-code collision recovery, database constraints, RLS and on-disk restart persistence all passed. That engine has one connection; it does not validate hosted network/TLS setup or concurrent PostgreSQL connections. No PGlite dependency was added to the app.
+An isolated temporary PGlite audit executed the actual 001 and 002 migrations with synthetic legacy records. Legacy values, repeat-migration idempotency, mixed-contact exactly-three referral progress, case/space deduplication, immutable attribution, actual share-code collision rollback/retry, plus/dot addresses, RLS and 20 invalid/duplicate/foreign-key constraint cases passed. The package and in-memory database were isolated under `/tmp`; no application dependency, real signup file or live database was used. This embedded engine verifies SQL behavior on one connection, not hosted network/TLS setup or multi-connection concurrency.
 
-The opt-in live integration suite creates a unique temporary schema in the supplied test database, applies the migration twice, checks concurrent duplicates and referral attribution, checks RLS, then removes only that test schema. It must use an isolated test database with schema-creation permission.
-
-No live credentials were read into tool output, and no external data or service was changed.
+The opt-in live PostgreSQL integration suite applies 001, inserts legacy fixtures, applies 002 twice, checks preserved values, mixed-contact referrals, concurrent duplicate emails and RLS, then removes only its UUID-named schema. Use an isolated test database with schema-creation permission. That suite was not run for this update, so hosted network/TLS and real multi-connection behavior remain unverified against a live PostgreSQL instance.

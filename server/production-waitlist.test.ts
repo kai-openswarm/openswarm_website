@@ -24,19 +24,19 @@ async function setup(t: TestContext, handler: (request: IncomingMessage, respons
   }
 }
 
-test('hosted handler accepts runtime-parsed JSON and returns no phone or database fields', async (t) => {
+test('hosted handler accepts runtime-parsed JSON and returns no contacts or database fields', async (t) => {
   const code = 'a'.repeat(32)
   const referral = { code, count: 0, goal: 3 as const, priorityAccess: false }
   const store: WaitlistStore = {
-    async add(phone, source, inviter) {
-      assert.equal(phone, '+12025550123')
+    async add(email, source, inviter) {
+      assert.equal(email, 'alex@example.com')
       assert.equal(source, 'hero')
       assert.equal(inviter, undefined)
       return { added: true, referral }
     },
     async referral() { return referral },
   }
-  const { post, url } = await setup(t, createProductionWaitlistHandler(store), { phone: '2025550123', source: 'hero' })
+  const { post, url } = await setup(t, createProductionWaitlistHandler(store), { email: ' Alex@Example.com ', source: 'hero' })
   const response = await post({})
   assert.equal(response.status, 201)
   assert.deepEqual(await response.json(), { ok: true, referral })
@@ -51,17 +51,17 @@ test('runtime-parsed bodies retain the size limit before calling storage', async
     async add() { assert.fail('Oversized input must not reach storage') },
     async referral() { return null },
   }
-  const { post } = await setup(t, createProductionWaitlistHandler(store), { phone: '2025550123', extra: 'x'.repeat(5000) })
+  const { post } = await setup(t, createProductionWaitlistHandler(store), { email: ' Alex@Example.com ', extra: 'x'.repeat(5000) })
   assert.equal((await post({})).status, 413)
 })
 
 test('hosted failures expose only a generic retry response', async (t) => {
   const store: WaitlistStore = {
-    async add() { throw new Error('example-connection-secret and +12025550123') },
+    async add() { throw new Error('example-connection-secret and alex@example.com') },
     async referral() { throw new Error('example-connection-secret') },
   }
   const { post } = await setup(t, createProductionWaitlistHandler(store))
-  const response = await post({ phone: '2025550123' })
+  const response = await post({ email: ' Alex@Example.com ' })
   assert.equal(response.status, 503)
   assert.deepEqual(await response.json(), { ok: false, error: 'The waitlist could not be saved. Please try again.' })
 })
@@ -71,7 +71,7 @@ test('production without DATABASE_URL fails safely rather than claiming a local 
   delete process.env.DATABASE_URL
   try {
     const { post } = await setup(t, handleProductionWaitlist)
-    const response = await post({ phone: '2025550123' })
+    const response = await post({ email: ' Alex@Example.com ' })
     assert.equal(response.status, 503)
     assert.deepEqual(await response.json(), { ok: false, error: 'The waitlist could not be saved. Please try again.' })
   } finally {

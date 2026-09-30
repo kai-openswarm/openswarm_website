@@ -1,5 +1,7 @@
 import { useRef } from 'react'
-import { APP_GLYPH, AppTile, Desktop, Glyph, Stage, StepRow, TILE, Thinking, clamp, easeInOut, easeOut, ep, inOut, lerp, popIn, rise, seg, typed, useTimeline, type Step, type TileColor } from './kit'
+import type { AppAssetId } from '@/lib/app-assets'
+import { DemoAppIcon } from './DemoAppIcon'
+import { AppTile, Desktop, Glyph, Stage, StepRow, Thinking, clamp, easeInOut, easeOut, ep, inOut, lerp, popIn, rise, seg, typed, useTimeline, type Step } from './kit'
 
 /*
   "Apps on request." The ask comes in as a spoken pill, an agent reads the calendar and
@@ -57,7 +59,6 @@ function AskPill({ t }: { t: number }) {
   )
 }
 
-const SUN = APP_GLYPH.brief
 const SEARCH = 'M9 14a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM12.7 12.7 16.5 16.5'
 
 /* ---------- the agent ---------- */
@@ -121,7 +122,7 @@ function AgentPanel({ t }: { t: number }) {
         <span className="h-[8px] w-[8px] rounded-full bg-black/15" />
         <span className="h-[8px] w-[8px] rounded-full bg-black/15" />
         <span className="h-[8px] w-[8px] rounded-full bg-black/15" />
-        <span className="ml-[3px] flex h-[26px] items-center gap-[7px] rounded-full bg-[#3f353f] pl-[11px] pr-[8px] text-[13px] font-semibold text-white shadow-[0_4px_12px_-6px_rgba(40,20,40,0.6)]">
+        <span className="ml-[3px] flex h-[26px] items-center gap-[7px] demo-title rounded-full pl-[11px] pr-[8px] text-[13px] font-semibold text-white shadow-[0_4px_12px_-6px_rgba(40,20,40,0.6)]">
           Daily brief app
           <span className="relative h-[17px] w-[40px]">
             {done < 1 && (
@@ -138,7 +139,7 @@ function AgentPanel({ t }: { t: number }) {
         </span>
       </div>
       {/* card */}
-      <div className="relative overflow-hidden rounded-[14px] bg-[#3c353c] px-[12px] pt-[14px] shadow-[0_24px_50px_-26px_rgba(50,20,60,0.7),inset_0_0_0_1px_rgba(255,255,255,0.05)]" style={{ height: CARD.body }}>
+      <div className="relative overflow-hidden rounded-[14px] demo-panel px-[12px] pt-[14px]" style={{ height: CARD.body }}>
         <div className="flex flex-col gap-[9px]">
           <div className="h-[17px]">{s[0] > 0 && <StepRow step={S1} p={s[0]} />}</div>
           <div className="h-[17px]">{s[1] > 0 && <StepRow step={S2} p={s[1]} />}</div>
@@ -364,13 +365,13 @@ function BriefMorph({ t }: { t: number }) {
             className="absolute inset-0 flex items-center justify-center text-white"
             style={{
               opacity: vp,
-              background: `linear-gradient(165deg, ${TILE.violet[0]} 0%, ${TILE.violet[1]} 100%)`,
+              background: '#7751cf',
               boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -3px 6px rgba(0,0,0,0.12)',
             }}
           >
             {gp > 0 && (
               <span className="flex" style={{ opacity: gp, transform: `scale(${(w / ICON) * (0.75 + 0.25 * gp)})` }}>
-                <Glyph d={SUN} size={24} />
+                <DemoAppIcon asset="brief" size={ICON} />
               </span>
             )}
           </div>
@@ -382,13 +383,13 @@ function BriefMorph({ t }: { t: number }) {
 
 /* ---------- the launcher ---------- */
 
-// colours and glyphs match the hero's launcher
-const APPS: { label: string; color: TileColor; glyph?: string }[] = [
-  { label: 'CRM Core', color: 'blue', glyph: APP_GLYPH.crm },
-  { label: 'Job Hunter', color: 'green', glyph: APP_GLYPH.jobs },
-  { label: 'Lead Finder', color: 'indigo', glyph: APP_GLYPH.leads },
-  { label: 'Validator', color: 'teal', glyph: APP_GLYPH.validator },
-  { label: 'Bookmarks', color: 'pink' },
+// The same original app assets are used in the hero and the smaller capability scene.
+const APPS: { label: string; asset: AppAssetId }[] = [
+  { label: 'CRM Core', asset: 'crm' },
+  { label: 'Post Harvester', asset: 'postHarvester' },
+  { label: 'Lead Finder', asset: 'leads' },
+  { label: 'Validator', asset: 'validator' },
+  { label: 'Finder', asset: 'finder' },
 ]
 
 function LauncherPanel({ t }: { t: number }) {
@@ -398,11 +399,11 @@ function LauncherPanel({ t }: { t: number }) {
   const lab = ep(t, 8.3, 8.7)
   return (
     <div
-      className="absolute overflow-hidden rounded-[16px] bg-[#1f1b22]/95 shadow-[0_30px_60px_-24px_rgba(40,10,50,0.7),inset_0_0_0_1px_rgba(255,255,255,0.07)]"
+      className="demo-launcher absolute overflow-hidden rounded-[16px]"
       style={{ left: LAU.x, top: LAU.y, width: LAU.w, height: LAU.h, opacity: clamp(lp * 1.4), transform: `translateY(${(1 - lp) * 36}px) scale(${0.97 + 0.03 * lp})`, transformOrigin: '50% 100%' }}
     >
       <div className="absolute left-[14px] top-[14px] flex h-[16px] items-center gap-[8px]">
-        <span className="text-[11px] font-semibold tracking-[0.14em] text-white/55">APPLICATIONS</span>
+        <span className="text-[11px] font-semibold tracking-[0.14em] text-white/80">APPLICATIONS</span>
         <span className="relative h-[17px] w-[27px] overflow-hidden rounded-full bg-white/10 text-center text-[11px] leading-[17px] text-white/70 tabular-nums">
           {tick < 1 && (
             <span className="absolute inset-0" style={{ transform: `translateY(${-tick * 14}px)`, opacity: 1 - tick }}>
@@ -416,13 +417,13 @@ function LauncherPanel({ t }: { t: number }) {
           )}
         </span>
       </div>
-      <div className="absolute left-[14px] right-[14px] top-[40px] flex h-[28px] items-center gap-[7px] rounded-[8px] bg-white/[0.07] px-[10px] text-[12px] text-white/40">
+      <div className="demo-launcher-search absolute left-[14px] right-[14px] top-[40px] flex h-[28px] items-center gap-[7px] rounded-[8px] px-[10px] text-[12px]">
         <Glyph d={SEARCH} size={13} />
         Search your apps
       </div>
       {APPS.map((app, i) => (
         <div key={app.label} className="absolute flex justify-center" style={{ left: 14 + (i % 3) * PITCH_X, top: GRID_TOP + Math.floor(i / 3) * PITCH_Y, width: COL }}>
-          <AppTile label={app.label} from={TILE[app.color][0]} to={TILE[app.color][1]} glyph={app.glyph && <Glyph d={app.glyph} size={ICON * 0.46} />} size={ICON} labelClass="text-[12px] max-w-[80px]" p={ep(t, 7.05 + i * 0.07, 7.5 + i * 0.07)} />
+          <AppTile label={app.label} asset={app.asset} size={ICON} labelClass="text-[12px] max-w-[80px]" p={ep(t, 7.05 + i * 0.07, 7.5 + i * 0.07)} />
         </div>
       ))}
       {lab > 0 && (

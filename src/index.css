@@ -127,16 +127,12 @@ body {
   border-color: #7b9aaf;
   box-shadow: inset 0 1px 0 #fff, 0 0 0 3px rgba(255,255,255,.48), 0 3px 9px rgba(34,60,75,.09);
 }
-.phone-country { background: linear-gradient(180deg,rgba(255,255,255,.7),rgba(210,228,240,.46)); box-shadow: inset 0 0 0 1px rgba(125,155,174,.10); transition: background-color 140ms ease, box-shadow 140ms ease; }
-.phone-country:hover { background-color: rgba(202,223,237,.45); }
-.phone-country:has(select:focus-visible) { outline: 2px solid #6b859b; outline-offset: 1px; }
-.phone-field-divider { background: linear-gradient(transparent,rgba(114,145,165,.30),transparent); }
-.phone-focus-line { background: linear-gradient(90deg,transparent,#83afca 24%,#467696 50%,#83afca 76%,transparent); opacity: 0; transform: scaleX(.35); transition: transform 220ms cubic-bezier(.2,.75,.2,1),opacity 160ms ease; }
-.liquid-glass-input:focus-within .phone-focus-line { opacity: .8; transform: scaleX(1); }
+.input-focus-line { background: linear-gradient(90deg,transparent,#83afca 24%,#467696 50%,#83afca 76%,transparent); opacity: 0; transform: scaleX(.35); transition: transform 220ms cubic-bezier(.2,.75,.2,1),opacity 160ms ease; }
+.liquid-glass-input:focus-within .input-focus-line { opacity: .8; transform: scaleX(1); }
 .liquid-glass-input[data-disabled] { opacity: .65; }
 .liquid-glass-input:has([aria-invalid="true"]) { border-color: #9f2424; }
-.liquid-glass-input:has([aria-invalid="true"]) .phone-focus-line { background: linear-gradient(90deg,transparent,#9f2424,transparent); }
-@media (prefers-reduced-motion: reduce) { .liquid-glass-input, .phone-country, .phone-focus-line { transition: none; } }
+.liquid-glass-input:has([aria-invalid="true"]) .input-focus-line { background: linear-gradient(90deg,transparent,#9f2424,transparent); }
+@media (prefers-reduced-motion: reduce) { .liquid-glass-input, .input-focus-line { transition: none; } }
 /* The rim keeps flowing at rest; only the tiny gradient surface repaints. */
 @property --liquid-metal-angle {
   syntax: '<angle>';

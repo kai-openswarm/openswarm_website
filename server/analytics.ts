@@ -9,7 +9,7 @@ import { RequestError, clientIp, hashValue, hashingSecret, header, originAllowed
 /** Events the browser tracker may send. Anything else is dropped. */
 export const EVENT_NAMES = new Set([
   'pageview', 'engagement', 'scroll', 'section_view', 'click', 'outbound', 'tab',
-  'waitlist_view', 'waitlist_start', 'waitlist_country', 'waitlist_error', 'waitlist_submit', 'waitlist_success', 'waitlist_fail',
+  'waitlist_view', 'waitlist_start', 'waitlist_error', 'waitlist_submit', 'waitlist_success', 'waitlist_fail',
   'referral_open', 'referral_copy', 'referral_share', 'privacy_optout', 'vital', 'error',
 ])
 

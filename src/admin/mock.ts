@@ -265,7 +265,18 @@ const PLACEMENTS = [
 const TABS = [['use-cases: Sales', 30], ['use-cases: Research', 26], ['use-cases: Content', 20], ['use-cases: Operations', 14], ['use-cases: Personal', 10], ['capabilities: Browser', 12], ['capabilities: Files', 8]] as const
 const CLICKS = [['hero:join', 30], ['nav:join', 16], ['hero:watch-demo', 14], ['nav:marketplace', 10], ['closing:join', 12], ['marketplace:lead-finder', 6], ['marketplace:problem-validator', 4], ['nav:logo', 4], ['footer:privacy', 2], ['footer:terms', 1]] as const
 const OUTBOUND = [['https://x.com/openswarm', 40], ['https://github.com/openswarm', 25], ['https://discord.gg/openswarm', 20], ['https://www.producthunt.com/posts/open-swarm', 10], ['https://www.youtube.com/@openswarm', 5]] as const
-const ERROR_REASONS = [['invalid_phone', 45], ['rate_limited', 18], ['network', 15], ['unsupported_country', 12], ['500', 6], ['captcha', 4]] as const
+const ERROR_REASONS = [['invalid_email', 45], ['empty', 14], ['429', 16], ['400', 8], ['500', 5], ['503', 3]] as const
+
+const FIRST = ['alex', 'sam', 'jordan', 'maya', 'priya', 'chen', 'lucas', 'emma', 'noah', 'olivia', 'ravi', 'sofia', 'liam', 'ava', 'kenji', 'lea', 'omar', 'zoe', 'dan', 'nina']
+const LAST = ['kim', 'patel', 'garcia', 'nguyen', 'smith', 'mueller', 'rossi', 'tanaka', 'silva', 'cohen', 'brown', 'lee', 'martin', 'singh', 'wang']
+const DOMAINS = [['gmail.com', 55], ['icloud.com', 12], ['outlook.com', 8], ['yahoo.com', 5], ['proton.me', 4], ['hey.com', 2], ['stripe.com', 1], ['acme.io', 1], ['berkeley.edu', 2]] as const
+
+function email(rand: Rand) {
+  const f = FIRST[Math.floor(rand() * FIRST.length)]
+  const l = LAST[Math.floor(rand() * LAST.length)]
+  const local = pick(rand, [[`${f}.${l}`, 4], [`${f}${l}`, 3], [`${f}${Math.floor(rand() * 999)}`, 3], [`${f[0]}${l}`, 2]] as const)
+  return `${local}${Math.floor(rand() * 90) + 10}@${pick(rand, DOMAINS)}`
+}
 
 // ---------------------------------------------------------------------------
 // Dataset
@@ -295,13 +306,15 @@ interface MockSession {
 }
 
 interface MockSignup {
-  phone: string
+  email: string | null
+  /** Legacy signups from before the switch to email. */
+  phone: string | null
   code: string
   created_at: number
   placement: string
   referred_by: string | null
   network_hash: string
-  consent_version: string
+  consent_version: string | null
   session: MockSession | null
 }
 
@@ -366,7 +379,7 @@ function buildDataset() {
       const started = saw_form && engaged && chance(rand, startP * 1.6)
       const submitted = started && chance(rand, 0.72)
       const converted = submitted && chance(rand, 0.84)
-      const error = submitted && !converted ? pick(rand, ERROR_REASONS) : started && chance(rand, 0.1) ? 'invalid_phone' : null
+      const error = submitted && !converted ? pick(rand, ERROR_REASONS) : started && chance(rand, 0.1) ? 'invalid_email' : null
       const shared = converted && chance(rand, 0.34)
       const placement = pick(rand, PLACEMENTS)
 
@@ -407,11 +420,13 @@ function buildDataset() {
           const pool = chance(rand, 0.35) ? referrers.slice(0, 12) : referrers
           referred_by = pool[Math.floor(rand() * pool.length)].code
         }
+        // A few legacy phone signups remain from before the switch to email.
+        const legacy = chance(rand, 0.03)
         const geo = GEOS.find((g) => g.country === p.country)
-        const phone = `${geo?.dial ?? '+1'}${geo?.dial === '+1' ? pick(rand, [['415', 3], ['212', 2], ['512', 1], ['206', 1], ['617', 1], ['647', 1]] as const) : ''}${String(Math.floor(1_000_000 + rand() * 8_999_999))}`
+        const phone = legacy ? `${geo?.dial ?? '+1'}${geo?.dial === '+1' ? pick(rand, [['415', 3], ['212', 2], ['512', 1], ['206', 1], ['617', 1], ['647', 1]] as const) : ''}${String(Math.floor(1_000_000 + rand() * 8_999_999))}` : null
         const signup: MockSignup = {
-          phone, code: code(rand), created_at: started_at + Math.round(active_ms * 0.7), placement,
-          referred_by, network_hash: code(rand, 22), consent_version: '2026-09-sms-v1', session: s,
+          email: legacy ? null : email(rand), phone, code: code(rand), created_at: started_at + Math.round(active_ms * 0.7), placement,
+          referred_by, network_hash: code(rand, 22), consent_version: legacy ? null : 'email-2026-09-30', session: s,
         }
         signups.push(signup)
         if (chance(rand, 0.4)) referrers.push(signup)
@@ -425,7 +440,7 @@ function buildDataset() {
     for (let j = 0; j < 4; j++) {
       const base = signups[signups.length - 1 - Math.floor(rand() * 200)]
       signups.push({
-        ...base, phone: `+1415${String(Math.floor(1_000_000 + rand() * 8_999_999))}`, code: code(rand),
+        ...base, email: email(rand), phone: null, consent_version: 'email-2026-09-30', code: code(rand),
         created_at: Math.min(now - 60_000, o.created_at + (j + 1) * 3_600_000), referred_by: o.code,
         network_hash: j < 3 ? o.network_hash : code(rand, 22), placement: 'hero', session: null,
       })
@@ -443,8 +458,10 @@ function buildDataset() {
 const r4 = (n: number) => Math.round(n * 10_000) / 10_000
 const r1 = (n: number) => Math.round(n * 10) / 10
 
-function mask(phone: string) {
-  return `${phone.slice(0, 2)} ••• ••• ${phone.slice(-4)}`
+/** analytics.mask_contact */
+function mask(s: { email: string | null; phone: string | null }) {
+  if (s.email) return `${s.email[0]}•••@${s.email.split('@')[1]}`
+  return `••• ••• ${(s.phone ?? '').slice(-4)}`
 }
 
 function localStamp(ms: number) {
@@ -493,7 +510,7 @@ export function createMockApi(): AdminApi {
   ]
   const audit: AuditEntry[] = [
     { at: new Date(Date.now() - 3 * 3_600_000).toISOString(), actor: 'kai@openswarm.com', action: 'export_signups', detail: { from: '2026-09-01T00:00:00Z', to: '2026-09-30T00:00:00Z', rows: 412 } },
-    { at: new Date(Date.now() - 26 * 3_600_000).toISOString(), actor: 'alex@openswarm.com', action: 'reveal_phone', detail: { code: 'k3J9...' } },
+    { at: new Date(Date.now() - 26 * 3_600_000).toISOString(), actor: 'alex@openswarm.com', action: 'reveal_contact', detail: { code: 'k3J9xQ2mTf8LwP0aZr5VbN7cYd1EhUo4' } },
     { at: new Date(Date.now() - 30 * 3_600_000).toISOString(), actor: 'kai@openswarm.com', action: 'add_admin', detail: { email: me } },
     { at: new Date(Date.now() - 50 * 3_600_000).toISOString(), actor: 'haik@openswarm.com', action: 'update_setting', detail: { key: 'waitlist_count_baseline', value: 6327 } },
   ]
@@ -737,25 +754,25 @@ export function createMockApi(): AdminApi {
         if (!q) return true
         const d = s.session?.dims
         const has = (v: string | null | undefined) => !!v && v.toLowerCase().includes(q.toLowerCase())
-        return (digits.length >= 3 && s.phone.includes(digits)) || has(s.placement) || has(d?.utm_campaign) || has(d?.utm_source) ||
+        return has(s.email) || (digits.length >= 3 && !!s.phone?.includes(digits)) || has(s.placement) || has(d?.utm_campaign) || has(d?.utm_source) ||
           (d?.country ?? '').toLowerCase() === q.toLowerCase() || s.code === q
       }).reverse()
       return { total: rows.length, rows: rows.slice(offset, offset + limit).map((s) => toRow(s)) }
     }),
 
-    revealPhone: (c) => delay(() => {
+    revealContact: (c) => delay(() => {
       const s = data.signups.find((x) => x.code === c)
       if (!s) throw new ApiError('Signup not found.', 'P0002')
-      audited('reveal_phone', { code: c })
-      return s.phone
+      audited('reveal_contact', { code: c })
+      return s.email ?? s.phone ?? ''
     }),
 
     exportSignups: (r) => delay((): ExportRow[] => {
       const rows = signupsIn(r.from, r.to).map((s) => {
         const d = s.session?.dims
         return {
-          phone: s.phone, created_at: new Date(s.created_at).toISOString(), placement: s.placement, referral_code: s.code,
-          referred_by: s.referred_by, consent_version: s.consent_version, consented_at: new Date(s.created_at).toISOString(),
+          email: s.email, phone: s.phone, created_at: new Date(s.created_at).toISOString(), placement: s.placement, referral_code: s.code,
+          referred_by: s.referred_by, consent_version: s.consent_version, consented_at: s.consent_version ? new Date(s.created_at).toISOString() : null,
           invites: invitesOf(s), channel: d?.channel ?? null, traffic_source: d?.source ?? null, utm_source: d?.utm_source ?? null,
           utm_medium: d?.utm_medium ?? null, utm_campaign: d?.utm_campaign ?? null, utm_term: d?.utm_term ?? null,
           utm_content: d?.utm_content ?? null, referrer_domain: d?.referrer_domain ?? null, landing_path: d?.entry_path ?? null,
@@ -777,7 +794,7 @@ export function createMockApi(): AdminApi {
         const vid = s.session.visitor_id
         data.sessions = data.sessions.filter((x) => x.visitor_id !== vid)
       }
-      audited('delete_signup', { code: c, masked: mask(s.phone) })
+      audited('delete_signup', { code: c, masked: mask(s) })
     }),
 
     referrals: (r) => delay((): Referrals => {
@@ -805,11 +822,11 @@ export function createMockApi(): AdminApi {
         priority_unlocked: inv.filter((x) => x.invites >= 3).length,
         distribution: (['0', '1', '2', '3+'] as const).map((bucket, i) => ({ bucket, people: dist[i] })),
         leaderboard: inv.filter((x) => x.invites > 0).sort((p, q) => q.invites - p.invites || p.o.created_at - q.o.created_at).slice(0, 25).map((x) => ({
-          code: x.o.code, phone_masked: mask(x.o.phone), joined_at: new Date(x.o.created_at).toISOString(), invites: x.invites,
+          code: x.o.code, contact_masked: mask(x.o), joined_at: new Date(x.o.created_at).toISOString(), invites: x.invites,
           invites_in_range: x.inRange, priority: x.invites >= 3, channel: x.o.session?.dims.channel ?? null, country: x.o.session?.dims.country ?? null,
         })),
         suspicious: inv.map((x) => ({
-          code: x.o.code, phone_masked: mask(x.o.phone), invites: x.invites,
+          code: x.o.code, contact_masked: mask(x.o), invites: x.invites,
           shared: x.list.filter((i) => i.network_hash === x.o.network_hash || x.list.some((j) => j !== i && j.network_hash === i.network_hash)).length,
         })).filter((x) => x.shared >= 2).sort((p, q) => q.shared - p.shared).slice(0, 25),
       }
@@ -895,20 +912,20 @@ export function createMockApi(): AdminApi {
   }
 
   function invitesOf(s: MockSignup) {
-    return data.signups.filter((i) => i.referred_by === s.code && i.phone !== s.phone).length
+    return data.signups.filter((i) => i.referred_by === s.code && i.code !== s.code).length
   }
 
   function toRow(s: MockSignup): SignupRow {
     const d = s.session?.dims
     return {
-      code: s.code, phone_masked: mask(s.phone), created_at: new Date(s.created_at).toISOString(), placement: s.placement,
+      code: s.code, contact_masked: mask(s), contact_type: s.email ? 'email' : 'phone', created_at: new Date(s.created_at).toISOString(), placement: s.placement,
       was_invited: s.referred_by !== null, invites: invitesOf(s), channel: d?.channel ?? null, traffic_source: d?.source ?? null,
       utm_source: d?.utm_source ?? null, utm_medium: d?.utm_medium ?? null, utm_campaign: d?.utm_campaign ?? null,
       referrer_domain: d?.referrer_domain ?? null, country: d?.country ?? null, region: d?.region ?? null, city: d?.city ?? null,
       device_type: d?.device_type ?? null, browser: d?.browser ?? null, os: d?.os ?? null,
       seconds_to_signup: s.session ? Math.round((s.created_at - s.session.started_at) / 1000) : null,
       sessions_before: s.session ? (s.session.dims.is_new_visitor === 'true' ? 1 : 2) : null,
-      consent_version: s.consent_version, consented_at: new Date(s.created_at).toISOString(),
+      consent_version: s.consent_version, consented_at: s.consent_version ? new Date(s.created_at).toISOString() : null,
     }
   }
 

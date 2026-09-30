@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowRight, Check, LoaderCircle } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
-import { parsePhoneNumberFromString } from 'libphonenumber-js/min'
 import { LiquidGlassInput } from './LiquidGlassInput'
 import { LiquidMetalButton } from './LiquidMetalButton'
 import { RollText } from './RollText'
 import { SuccessParticles } from './particle-button'
 import { OPEN_REFERRAL_EVENT, WaitlistReferralDialog, WaitlistShareButton } from './WaitlistReferral'
-import { normalizePhone, type CountryCode } from '@/lib/phone'
+import { normalizeEmail } from '@/lib/email'
 import { incomingReferralCode, parseReferral, saveReferralCode, type Referral } from '@/lib/referral'
 import { LINKS } from '@/lib/utils'
 import { analyticsIds, flush, track } from '@/lib/analytics'
@@ -15,12 +14,11 @@ import { trackXSignup } from '@/lib/x-pixel'
 import { prepareTurnstile, turnstileToken } from '@/lib/turnstile'
 import { WAITLIST_JOINED_EVENT } from '@/lib/waitlist-count'
 
-/** Stored with each signup. Change it whenever the consent wording below changes. */
-export const SMS_CONSENT_VERSION = 'sms-2026-09-30'
+/** Stored with each signup. Change it whenever the wording under the form changes. */
+const CONSENT_VERSION = 'email-2026-09-30'
 
 export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
-  const [phone, setPhone] = useState('')
-  const [country, setCountry] = useState<CountryCode>('US')
+  const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle')
   const [referral, setReferral] = useState<Referral | null>(null)
@@ -34,7 +32,7 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
   const source = useRef<string>(placement)
   const started = useRef(false)
   const container = useRef<HTMLDivElement>(null)
-  const id = placement === 'hero' ? 'waitlist-phone' : 'waitlist-closing-phone'
+  const id = placement === 'hero' ? 'waitlist-email' : 'waitlist-closing-email'
 
   useEffect(() => {
     if (placement !== 'hero') return
@@ -82,10 +80,10 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending.current) return
-    const normalized = normalizePhone(phone, country)
+    const normalized = normalizeEmail(email)
     if (!normalized) {
-      track('waitlist_error', { code: phone.trim() ? 'invalid_phone' : 'empty', country })
-      setError('Enter a valid number and check the country code.')
+      track('waitlist_error', { code: email.trim() ? 'invalid_email' : 'empty' })
+      setError('Enter a valid email address.')
       input.current?.focus({ preventScroll: true })
       return
     }
@@ -93,7 +91,7 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
     setError('')
     setStatus('submitting')
     const invitedBy = incomingReferralCode()
-    track('waitlist_submit', { placement, source: source.current, country, invited: !!invitedBy })
+    track('waitlist_submit', { placement, source: source.current, invited: !!invitedBy })
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 12000)
     const request = { controller, timeout }
@@ -105,10 +103,10 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: normalized,
+          email: normalized,
           source: source.current,
           referralCode: invitedBy,
-          consentVersion: SMS_CONSENT_VERSION,
+          consentVersion: CONSENT_VERSION,
           turnstileToken: verification,
           ...analyticsIds(),
         }),
@@ -132,7 +130,7 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
         saveReferralCode(personalReferral.code)
         setReferral(personalReferral)
       }
-      setPhone('')
+      setEmail('')
       setStatus('success')
       setDialogOpen(true)
     } catch (failure) {
@@ -158,27 +156,25 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
           <motion.span className="font-medium" initial={reducedMotion ? false : { opacity: 0, x: -3 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, delay: 0.04 }}>You’re in.</motion.span>
           <WaitlistShareButton className="ml-auto" onClick={(event) => { event.preventDefault(); setDialogOpen(true) }}>Invite friends</WaitlistShareButton>
           <div className="absolute inset-x-0 top-full mt-2 text-center text-[10.5px] leading-[1.4] text-ink/65">
-            <p>We’ll text you when early access opens.</p>
-            <button type="button" aria-label="Join with another phone number" className="mt-0.5 underline decoration-black/25 underline-offset-2 hover:text-ink" onClick={() => { restoreInputFocus.current = true; setStatus('idle'); setError('') }}>Another number</button>
+            <p>We’ll email you when early access opens.</p>
+            <button type="button" aria-label="Join with another email address" className="mt-0.5 underline decoration-black/25 underline-offset-2 hover:text-ink" onClick={() => { restoreInputFocus.current = true; setStatus('idle'); setError('') }}>Another email</button>
           </div>
         </motion.div>
       ) : (
         <form onSubmit={submit} noValidate aria-label="Join the Open Swarm waitlist" aria-busy={status === 'submitting'} className="group/form grid h-11 grid-cols-[minmax(0,1fr)_auto] gap-2.5">
-          <label htmlFor={id} className="sr-only">Phone number</label>
+          <label htmlFor={id} className="sr-only">Email address</label>
             <LiquidGlassInput
               ref={input}
-              country={country}
-              onCountryChange={(next) => { setCountry(next); setError(''); track('waitlist_country', { country: next }); input.current?.focus({ preventScroll: true }) }}
               id={id}
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
+              name="email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
               spellCheck={false}
-              placeholder="Number"
-              title="Select your country or paste a full international number"
-              value={phone}
-              maxLength={40}
+              placeholder="Your email"
+              value={email}
+              maxLength={254}
               required
               disabled={status === 'submitting'}
               aria-invalid={!!error}
@@ -189,28 +185,21 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
                 started.current = true
                 track('waitlist_start', { placement })
               }}
-              onChange={(event) => { setPhone(event.target.value); if (error) setError('') }}
-              onBlur={() => {
-                // A pasted international number selects its real region and avoids a duplicated prefix.
-                if (!phone.trim().startsWith('+') || !normalizePhone(phone, country)) return
-                const parsed = parsePhoneNumberFromString(phone.trim(), { extract: false })
-                if (parsed?.country) {
-                  setCountry(parsed.country)
-                  setPhone(parsed.formatNational())
-                }
-              }}
+              onChange={(event) => { setEmail(event.target.value); if (error) setError('') }}
             />
-          <LiquidMetalButton type="submit" disabled={status === 'submitting'} className="disabled:cursor-wait disabled:opacity-75">
-            {status === 'submitting' ? <><LoaderCircle size={15} strokeWidth={1.75} aria-hidden className="motion-safe:animate-spin" /><span>Joining…</span></> : <><RollText>Join free waitlist</RollText><ArrowRight size={20} strokeWidth={1.8} aria-hidden className="liquid-action-arrow hidden min-[440px]:block" /></>}
+          <LiquidMetalButton type="submit" disabled={status === 'submitting'} className="relative disabled:cursor-wait disabled:opacity-75">
+            <span className={status === 'submitting' ? 'invisible flex items-center gap-2' : 'flex items-center gap-2'} aria-hidden={status === 'submitting' || undefined}><RollText>Join free waitlist</RollText><ArrowRight size={20} strokeWidth={1.8} aria-hidden className="liquid-action-arrow hidden min-[440px]:block" /></span>
+            {status === 'submitting' && <span className="absolute inset-0 flex items-center justify-center gap-2" role="status"><LoaderCircle size={15} strokeWidth={1.75} aria-hidden className="motion-safe:animate-spin" /><span>Joining…</span></span>}
           </LiquidMetalButton>
           <div className="absolute inset-x-0 top-full mt-2 text-center text-[10.5px] leading-[1.4]">
-            {error && <p id={`${id}-error`} role="alert" className="mb-0.5 text-[#9f2424]">{error}</p>}
-            <p id={`${id}-consent`} className="mx-auto max-w-[380px] text-ink/65">
-              By joining, you agree to receive recurring automated marketing texts from Open Swarm at this number. Consent is not a condition of purchase. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.
+            {error && <p id={`${id}-error`} role="alert" className="text-[#9f2424]">{error}</p>}
+            <p id={`${id}-consent`} className={error ? 'sr-only' : 'text-ink/65'}>
+              Early-access updates by email. Unsubscribe anytime.
               {' '}<a href={LINKS.privacy} className="underline decoration-black/25 underline-offset-2 hover:text-ink">Privacy</a>
               {' · '}<a href={LINKS.terms} className="underline decoration-black/25 underline-offset-2 hover:text-ink">Terms</a>
             </p>
-            <p id={`${id}-hint`} className="sr-only">Use the country selector for national phone numbers. You can also paste a full number beginning with + and its country code.</p>
+            <p id={`${id}-hint`} className="sr-only">Enter your email address to receive early-access updates.</p>
+            {!error && <p className="mt-0.5 text-ink/70 opacity-0 transition-opacity group-focus-within/form:opacity-100">Just launch updates. No spam.</p>}
           </div>
         </form>
       )}

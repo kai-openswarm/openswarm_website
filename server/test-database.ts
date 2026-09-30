@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { Pool } from 'pg'
 
-const MIGRATIONS = ['../sql/test/supabase-stub.sql', '../sql/001_waitlist.sql', '../sql/002_analytics.sql']
+export const BASE_MIGRATIONS = ['../sql/test/supabase-stub.sql', '../sql/001_waitlist.sql']
+export const LATER_MIGRATIONS = ['../sql/002_email_waitlist.sql', '../sql/003_analytics.sql']
 
 /** Runs against a throwaway database on TEST_DATABASE_URL's server, then drops it. */
 export async function withTestDatabase(run: (database: Pool) => Promise<void>) {
@@ -22,11 +23,16 @@ export async function withTestDatabase(run: (database: Pool) => Promise<void>) {
   }
 }
 
-/** Applies the Supabase stand-ins and every migration twice to prove they are re-runnable. */
-export async function applyMigrations(database: Pool) {
+/** Applies migration files in order, twice, to prove they are re-runnable. */
+export async function applyFiles(database: Pool, files: string[]) {
   for (let pass = 0; pass < 2; pass++) {
-    for (const file of MIGRATIONS) {
+    for (const file of files) {
       await database.query(await readFile(new URL(file, import.meta.url), 'utf8'))
     }
   }
+}
+
+/** The Supabase stand-ins and every migration. */
+export function applyMigrations(database: Pool) {
+  return applyFiles(database, [...BASE_MIGRATIONS, ...LATER_MIGRATIONS])
 }

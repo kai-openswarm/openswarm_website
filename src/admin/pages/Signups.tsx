@@ -11,11 +11,12 @@ import { Badge, Button, DataTable, Dialog, EmptyState, Panel, QueryView, Skeleto
 const PAGE_SIZE = 50
 
 const EXPORT_COLUMNS: (keyof ExportRow & string)[] = [
-  'created_at', 'phone', 'placement', 'referral_code', 'referred_by', 'invites', 'consent_version', 'consented_at',
+  'email', 'phone', 'created_at', 'placement', 'referral_code', 'referred_by', 'invites', 'consent_version', 'consented_at',
   'channel', 'traffic_source', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'referrer_domain',
   'landing_path', 'country', 'region', 'city', 'device_type', 'browser', 'os', 'seconds_to_signup', 'sessions_before',
 ]
-// Values that cannot start a spreadsheet formula (phone is validated E.164 by the database).
+// Values that cannot start a spreadsheet formula (legacy phone is validated E.164 by the database).
+// Email is visitor-controlled (its local part may start with "=" or "+"), so it stays guarded.
 const TRUSTED = new Set(['created_at', 'phone', 'consented_at', 'invites', 'seconds_to_signup', 'sessions_before'])
 
 export function Signups() {
@@ -42,8 +43,8 @@ export function Signups() {
   async function reveal(code: string) {
     setRevealed((m) => ({ ...m, [code]: 'loading' }))
     try {
-      const phone = await api.revealPhone(code)
-      setRevealed((m) => ({ ...m, [code]: phone }))
+      const contact = await api.revealContact(code)
+      setRevealed((m) => ({ ...m, [code]: contact }))
     } catch (e) {
       setRevealed((m) => ({ ...m, [code]: { error: errorMessage(e) } }))
     }
@@ -68,13 +69,14 @@ export function Signups() {
   const columns: Column<SignupRow>[] = [
     { key: 'created_at', label: 'Joined', render: (s) => <time dateTime={s.created_at} className="num">{fmtDateTime(s.created_at)}</time> },
     {
-      key: 'phone', label: 'Phone', render: (s) => {
+      key: 'contact', label: 'Contact', render: (s) => {
         const v = revealed[s.code]
         return (
           <span className="inline-flex items-center gap-2">
-            <span className="font-mono text-[12.5px]">{typeof v === 'string' && v !== 'loading' ? v : s.phone_masked}</span>
+            <span className="font-mono text-[12.5px]">{typeof v === 'string' && v !== 'loading' ? v : s.contact_masked}</span>
+            {s.contact_type === 'phone' && <Badge>Phone</Badge>}
             {v === undefined && (
-              <button type="button" onClick={() => reveal(s.code)} className="inline-flex items-center gap-1 rounded px-1 text-[12px] text-ink-3 hover:bg-hover hover:text-ink" aria-label={`Reveal phone number ${s.phone_masked}`}>
+              <button type="button" onClick={() => reveal(s.code)} className="inline-flex items-center gap-1 rounded px-1 text-[12px] text-ink-3 hover:bg-hover hover:text-ink" aria-label={`Reveal ${s.contact_type === 'email' ? 'email address' : 'phone number'} ${s.contact_masked}`}>
                 <Eye className="size-3.5" aria-hidden /> Reveal
               </button>
             )}
@@ -108,7 +110,7 @@ export function Signups() {
     { key: 'invited', label: 'Invited?', render: (s) => (s.was_invited ? <Badge tone="accent">Invited</Badge> : <span className="text-ink-3">—</span>) },
     {
       key: 'actions', label: 'Actions', srOnly: true, render: (s) => (
-        <button type="button" onClick={() => setToDelete(s)} className="rounded p-1.5 text-ink-3 hover:bg-hover hover:text-down" aria-label={`Delete signup ${s.phone_masked}`} title="Delete">
+        <button type="button" onClick={() => setToDelete(s)} className="rounded p-1.5 text-ink-3 hover:bg-hover hover:text-down" aria-label={`Delete signup ${s.contact_masked}`} title="Delete">
           <Trash2 className="size-4" aria-hidden />
         </button>
       ),
@@ -128,7 +130,7 @@ export function Signups() {
       )}
       <Panel
         title={q.data ? `${fmtInt(total)} signups` : 'Signups'}
-        subtitle="Phone numbers are masked. Revealing a number or exporting is recorded in the audit log."
+        subtitle="Email addresses are masked. Revealing an address or exporting is recorded in the audit log."
         actions={
           <Button onClick={() => { setExportError(null); setExportOpen(true) }} disabled={!q.data || total === 0}>
             <Download className="size-3.5" aria-hidden /> Export CSV
@@ -143,7 +145,7 @@ export function Signups() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Phone digits, placement, campaign, country code…"
+            placeholder="Email, placement, campaign, country…"
             className={`${inputClass} w-full pl-8`}
           />
         </div>
@@ -189,7 +191,7 @@ export function Signups() {
         }
       >
         <p>
-          This downloads every signup from <strong className="text-ink">{range.label}</strong> with <strong className="text-ink">full phone numbers</strong> and attribution. The export is recorded in the audit log with your email.
+          This downloads every signup from <strong className="text-ink">{range.label}</strong> with <strong className="text-ink">full email addresses</strong> (and phone numbers for older signups) and attribution. The export is recorded in the audit log with your email.
         </p>
         <p className="mt-2">Store the file securely and delete it when you are done.</p>
         {exportError && <p role="alert" className="mt-3 text-down">{exportError}</p>}
@@ -201,7 +203,7 @@ export function Signups() {
         onClose={() => setToDelete(null)}
         onDeleted={(row) => {
           setToDelete(null)
-          setNotice(`Deleted signup ${row.phone_masked} and its visit history.`)
+          setNotice(`Deleted signup ${row.contact_masked} and its visit history.`)
           q.reload()
         }}
       />
@@ -247,7 +249,7 @@ function DeleteDialog({ row, onClose, onDeleted }: { row: SignupRow | null; onCl
       {row && (
         <form onSubmit={(e) => { e.preventDefault(); void confirm() }}>
           <p>
-            This erases <span className="font-mono text-ink">{row.phone_masked}</span> from the waitlist, along with their attribution and their entire visit history. Use it for deletion requests. It cannot be undone.
+            This erases <span className="font-mono text-ink">{row.contact_masked}</span> from the waitlist, along with their attribution and their entire visit history. Use it for deletion requests. It cannot be undone.
           </p>
           <p className="mt-2">People they invited stay on the waitlist.</p>
           <label htmlFor="confirm-delete" className="mt-4 block text-[12px] font-medium text-ink-2">

@@ -36,11 +36,10 @@ export function Hero() {
           <h1 className="mx-auto mt-5 max-w-[850px] font-display text-[40px] font-normal leading-[1.08] tracking-[-0.045em] text-[#0a2028] sm:mt-5 sm:text-[54px] lg:text-[60px]">
             Everyone gets a Jarvis now.
           </h1>
-          <p className="mt-4 text-[13px] font-medium tracking-[-0.01em] text-[#23434d] sm:text-[14px]">100% free. Your AI desktop for Mac.</p>
           <div className="mt-5">
             <WaitlistForm placement="hero" />
           </div>
-          <div className="mx-auto mt-[76px] flex min-h-10 flex-wrap items-center justify-center gap-2 text-[#35515a]">
+          <div className="mx-auto mt-9 flex min-h-10 flex-wrap items-center justify-center gap-2 text-[#35515a]">
             <p className="inline-flex h-10 items-center gap-2">
               <NumberTicker value={waitlistCount} className="font-semibold tracking-[-0.03em] text-[#52268b] text-[21px]" />
               <span className="text-[11.5px] font-medium text-[#3f5260]">on the waitlist</span>

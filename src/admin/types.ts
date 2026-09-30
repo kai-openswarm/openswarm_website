@@ -1,4 +1,4 @@
-// Types for the public.admin_* RPC functions in sql/002_analytics.sql.
+// Types for the public.admin_* RPC functions in sql/003_analytics.sql.
 // Field names and nullability mirror the jsonb each function builds.
 
 /** analytics.dimensions(): the only keys allowed in p_filters and p_dimension. */
@@ -124,9 +124,13 @@ export interface Realtime {
   recent: RealtimeEvent[]
 }
 
+export type ContactType = 'email' | 'phone'
+
 export interface SignupRow {
   code: string
-  phone_masked: string
+  /** Email as "a•••@example.com"; legacy phone signups as "••• ••• 1234". */
+  contact_masked: string
+  contact_type: ContactType
   created_at: string
   placement: string
   was_invited: boolean
@@ -155,7 +159,10 @@ export interface SignupsPage {
 }
 
 export interface ExportRow {
-  phone: string
+  /** Null only for legacy phone signups. */
+  email: string | null
+  /** Null for email signups. */
+  phone: string | null
   created_at: string
   placement: string
   referral_code: string
@@ -194,7 +201,7 @@ export interface Referrals {
   distribution: { bucket: '0' | '1' | '2' | '3+'; people: number }[]
   leaderboard: {
     code: string
-    phone_masked: string
+    contact_masked: string
     joined_at: string
     invites: number
     invites_in_range: number
@@ -202,7 +209,7 @@ export interface Referrals {
     channel: string | null
     country: string | null
   }[]
-  suspicious: { code: string; phone_masked: string; invites: number; shared: number }[]
+  suspicious: { code: string; contact_masked: string; invites: number; shared: number }[]
 }
 
 export interface VitalRow {

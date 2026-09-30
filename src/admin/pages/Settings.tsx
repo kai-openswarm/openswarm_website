@@ -7,6 +7,7 @@ import type { AdminSettings, AuditEntry } from '../types'
 import { Badge, Button, Dialog, EmptyState, Panel, QueryView, SkeletonRows, inputClass } from '../ui'
 
 const ACTIONS: Record<string, string> = {
+  reveal_contact: 'Revealed an email address',
   reveal_phone: 'Revealed a phone number',
   export_signups: 'Exported signups',
   delete_signup: 'Deleted a signup',
@@ -24,6 +25,7 @@ function auditDetail(e: AuditEntry): string {
     case 'update_setting': return `${s('key')} → ${s('value')}`
     case 'add_admin':
     case 'remove_admin': return s('email')
+    case 'reveal_contact':
     case 'reveal_phone': return s('code') ? `code ${s('code').slice(0, 8)}…` : ''
     default: return JSON.stringify(d)
   }
@@ -273,7 +275,7 @@ function Admins({ data, onChanged }: { data: AdminSettings; onChanged: () => voi
             {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden />} Invite
           </Button>
         </div>
-        <p className="text-[12px] text-ink-3">They’re added to the allowlist and can then request a sign-in link on this page. No email is sent automatically. Admins get full access, including phone numbers.</p>
+        <p className="text-[12px] text-ink-3">They’re added to the allowlist and can then request a sign-in link on this page. No email is sent automatically. Admins get full access, including email addresses.</p>
         {msg && <p role={msg.ok ? 'status' : 'alert'} className={`text-[12.5px] ${msg.ok ? 'text-up' : 'text-down'}`}>{msg.text}</p>}
       </form>
 

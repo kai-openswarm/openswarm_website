@@ -41,14 +41,14 @@ export function KitScene() {
           count={54}
           highlight={0}
           apps={[
-            { label: 'Daily Brief', color: 'violet' },
-            { label: 'CRM Core', color: 'blue' },
-            { label: 'Job Hunter', color: 'green' },
-            { label: 'Post Harvester', color: 'pink' },
-            { label: 'Finder', color: 'slate' },
-            { label: 'Dependency Scan', color: 'teal' },
-            { label: 'Lead Finder', color: 'indigo' },
-            { label: 'Validator', color: 'red' },
+            { label: 'Daily Brief', asset: 'brief' },
+            { label: 'CRM Core', asset: 'crm' },
+            { label: 'Akira', asset: 'akira' },
+            { label: 'Post Harvester', asset: 'postHarvester' },
+            { label: 'Finder', asset: 'finder' },
+            { label: 'Git Graph', asset: 'gitGraph' },
+            { label: 'Lead Finder', asset: 'leads' },
+            { label: 'Validator', asset: 'validator' },
           ]}
         />
         <Cursor x={1300} y={300} click={(t % 2) / 1} />

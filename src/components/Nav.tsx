@@ -255,11 +255,16 @@ export function Nav() {
               {MENUS.map((m) => {
                 const isOpen = open === m.key
                 const common = cn(
-                  'relative isolate flex h-9 items-center gap-1 rounded-[8px] px-2.5 text-[13px] font-medium transition-colors lg:px-3.5 lg:text-[14px]',
+                  'relative isolate flex h-9 origin-center items-center gap-1 rounded-[8px] px-2.5 text-[13px] font-medium transition-[color,background-color,scale] duration-150 ease-out motion-safe:active:scale-[0.985] lg:px-3.5 lg:text-[14px]',
                   isOpen ? 'text-ink' : 'text-ink-2 hover:text-ink',
                 )
                 const pill = (hover === m.key || (hover === null && isOpen)) && (
-                  <motion.span layoutId="nav-hover" className="absolute inset-0 -z-10 rounded-[8px] bg-black/[0.05]" transition={{ duration: reduce ? 0 : 0.3, ease: EASE }} />
+                  <motion.span
+                    aria-hidden
+                    layoutId={reduce ? undefined : 'nav-hover'}
+                    className="pointer-events-none absolute inset-0 -z-10 rounded-[8px] bg-white/45 bg-[linear-gradient(160deg,rgba(255,255,255,0.28),rgba(159,184,202,0.12))] shadow-[inset_0_1px_0_rgba(255,255,255,0.72),inset_0_0_0_1px_rgba(125,150,170,0.12),0_2px_4px_rgba(30,50,70,0.035)] backdrop-blur-md"
+                    transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 460, damping: 38, mass: 0.7 }}
+                  />
                 )
                 return (
                   <li

@@ -19,11 +19,11 @@ export function PanelRoot({ ref, label, children, className }: { ref: RefObject<
   )
 }
 
-/** The frosted white card the work happens in. */
+/** A translucent reading surface with a fine lit rim; text stays on the sharp foreground. */
 export function Glass({ children, className, style }: { children: ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
     <div
-      className={cn('rounded-[12px] bg-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.9),0_0_0_1px_rgba(10,30,60,0.06),0_24px_48px_-28px_rgba(10,30,60,0.45)] backdrop-blur-xl', className)}
+      className={cn('rounded-[12px] bg-white/70 bg-[linear-gradient(145deg,rgba(255,255,255,0.3),rgba(235,244,250,0.06)_55%,rgba(255,255,255,0.14))] shadow-[inset_0_1px_0_rgba(255,255,255,0.92),inset_0_0_0_1px_rgba(255,255,255,0.52),0_0_0_1px_rgba(10,30,60,0.05),0_20px_42px_-28px_rgba(10,30,60,0.36)] backdrop-blur-xl backdrop-saturate-[130%] [@media(prefers-reduced-transparency:reduce)]:bg-[#f4f7f9]', className)}
       style={style}
     >
       {children}
