@@ -8,7 +8,12 @@
     <meta name="description" content="Everyone gets a Jarvis now. Open Swarm is your 100% free AI desktop for Mac. Join the free waitlist for early access." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Manrope:wght@800&display=swap" rel="stylesheet" />
+    <!-- The hero image is the largest paint; start fetching it before the script runs. -->
+    <link rel="preload" as="image" href="./media/hero-sky.webp" fetchpriority="high" />
+    <!-- Web fonts load without blocking first paint; text shows in the system font until they arrive. -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Manrope:wght@800&display=swap" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Manrope:wght@800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Manrope:wght@800&display=swap" rel="stylesheet" /></noscript>
   </head>
   <body>
     <div id="root"></div>
