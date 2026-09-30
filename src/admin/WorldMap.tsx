@@ -22,7 +22,11 @@ export interface MapDatum {
   value: number
 }
 
-/** World map shaded by a count per country. Hover for the number, click to select a country. */
+/**
+ * World map shaded by a count per country. Hover for the number, click to select a country.
+ * The map is one image to assistive technology and has no tab stops: keyboard and screen-reader
+ * users get the same numbers and the same filter action from the country table on the page.
+ */
 export default function WorldMap({ data, valueLabel = 'Visitors', onSelect }: {
   data: MapDatum[]
   valueLabel?: string
@@ -70,14 +74,10 @@ export default function WorldMap({ data, valueLabel = 'Visitors', onSelect }: {
                 stroke="var(--panel)"
                 strokeWidth={0.6}
                 vectorEffect="non-scaling-stroke"
-                className={clickable ? 'cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125' : undefined}
-                tabIndex={clickable ? 0 : undefined}
-                role={clickable ? 'button' : undefined}
-                aria-label={clickable ? `Filter by ${countryName(code)}: ${fmtInt(v)} ${valueLabel.toLowerCase()}` : undefined}
+                className={clickable ? 'cursor-pointer hover:brightness-110' : undefined}
                 onMouseMove={code ? (e) => move(code, e) : undefined}
                 onMouseEnter={code ? (e) => move(code, e) : () => setTip(null)}
                 onClick={clickable ? () => onSelect?.(code) : undefined}
-                onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect?.(code) } } : undefined}
               />
             )
           })}

@@ -62,7 +62,7 @@ export function smtpFromEnv(env: NodeJS.ProcessEnv = process.env): SmtpConfig | 
 }
 
 type MailMessage = {
-  from: string
+  from: string | { name: string, address: string }
   to: string
   replyTo?: string
   subject: string
@@ -70,7 +70,7 @@ type MailMessage = {
   html: string
   headers: Record<string, string>
 }
-type MailTransport = { sendMail(message: MailMessage): Promise<{ messageId?: string }> }
+type MailTransport = { sendMail(message: MailMessage): Promise<{ messageId?: string }>, close?(): void }
 
 const smtpTransport = (smtp: SmtpConfig): MailTransport => nodemailer.createTransport({
   host: smtp.host,
@@ -79,15 +79,24 @@ const smtpTransport = (smtp: SmtpConfig): MailTransport => nodemailer.createTran
   secure: smtp.port === 465,
   requireTLS: smtp.port !== 465,
   auth: { user: smtp.user, pass: smtp.password },
-  connectionTimeout: 5_000,
-  greetingTimeout: 5_000,
-  socketTimeout: 8_000,
+  dnsTimeout: 3_000,
+  connectionTimeout: 4_000,
+  greetingTimeout: 4_000,
+  socketTimeout: 5_000,
 })
+
+/** Signups wait on the send, so it gets one overall deadline as well as the per-step socket timeouts. */
+const SMTP_DEADLINE_MS = 7_000
+
+/** Mail servers often echo the recipient in their reply; keep addresses out of the email log. */
+const redactAddresses = (value: string) => value.replace(/[^\s<>@"']+@[^\s<>@"']+/g, '[address]')
 
 export type SendOptions = {
   /** SMTP server to send through; null forces the Resend path. Defaults to the SMTP_* environment variables. */
   smtp?: SmtpConfig | null
   createTransport?: (smtp: SmtpConfig) => MailTransport
+  /** Overall limit for one SMTP send, in milliseconds. */
+  deadlineMs?: number
 }
 
 /**
@@ -115,19 +124,30 @@ export async function sendWelcomeEmail(
     'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
   }
   if (smtp) {
+    const transport = (options.createTransport ?? smtpTransport)(smtp)
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      const sent = await (options.createTransport ?? smtpTransport)(smtp).sendMail({
-        from,
-        to,
-        ...(template.reply_to ? { replyTo: template.reply_to } : {}),
-        subject: template.subject,
-        text,
-        html,
-        headers,
-      })
+      const sent = await Promise.race([
+        transport.sendMail({
+          // Name and address are passed separately so punctuation in the name cannot change the header's meaning.
+          from: template.from_name ? { name: template.from_name.replace(/[<>"]/g, ''), address: template.from_email } : template.from_email,
+          to,
+          ...(template.reply_to ? { replyTo: template.reply_to } : {}),
+          subject: template.subject,
+          text,
+          html,
+          headers,
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`timed out after ${options.deadlineMs ?? SMTP_DEADLINE_MS} ms`)), options.deadlineMs ?? SMTP_DEADLINE_MS)
+        }),
+      ])
       return { status: 'sent', providerId: sent.messageId }
     } catch (error) {
-      return { status: 'failed', detail: `SMTP: ${error instanceof Error ? error.message : 'send failed'}`.slice(0, 500) }
+      return { status: 'failed', detail: redactAddresses(`SMTP: ${error instanceof Error ? error.message : 'send failed'}`).slice(0, 500) }
+    } finally {
+      clearTimeout(timer)
+      transport.close?.()
     }
   }
   try {

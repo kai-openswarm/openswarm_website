@@ -125,15 +125,27 @@ test('welcome emails go through SMTP when it is configured, ahead of Resend', as
     { status: 'sent', providerId: '<m1@openswarm.com>' },
   )
   assert.deepEqual(used, [smtp])
-  assert.equal(mails[0].from, 'Open Swarm <noreply@openswarm.com>')
+  assert.deepEqual(mails[0].from, { name: 'Open Swarm', address: 'noreply@openswarm.com' })
   assert.equal(mails[0].to, 'alex@example.com')
   assert.equal(mails[0].replyTo, 'team@openswarm.com')
   assert.equal((mails[0].headers as Record<string, string>)['List-Unsubscribe'], '<https://u>')
 
-  const failing = () => ({ async sendMail(): Promise<never> { throw new Error('Invalid login') } })
+  let closed = 0
+  const failing = () => ({
+    async sendMail(): Promise<never> { throw new Error('550 5.1.1 <alex@example.com>: Recipient address rejected') },
+    close() { closed += 1 },
+  })
   assert.deepEqual(
     await sendWelcomeEmail(template, 'alex@example.com', 'https://x', 'https://u', undefined, neverFetch, { smtp, createTransport: failing }),
-    { status: 'failed', detail: 'SMTP: Invalid login' },
+    { status: 'failed', detail: 'SMTP: 550 5.1.1 <[address]>: Recipient address rejected' },
+    'recipient addresses never reach the email log',
+  )
+  assert.equal(closed, 1)
+
+  const hanging = () => ({ sendMail: () => new Promise<never>(() => {}) })
+  assert.deepEqual(
+    await sendWelcomeEmail(template, 'alex@example.com', 'https://x', 'https://u', undefined, neverFetch, { smtp, createTransport: hanging, deadlineMs: 20 }),
+    { status: 'failed', detail: 'SMTP: timed out after 20 ms' },
   )
 })
 

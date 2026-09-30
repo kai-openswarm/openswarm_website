@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Component, Suspense, lazy, type ReactNode } from 'react'
 import { useApi, useQuery, useView } from '../hooks'
 import { BreakdownCsv, BreakdownTabs } from '../Breakdown'
 import { Donut } from '../charts'
@@ -32,6 +32,19 @@ function DonutPanel({ dim, title }: { dim: Dimension; title: string }) {
 // The country outlines are about 110 KB, so they load only when this page is opened.
 const WorldMap = lazy(() => import('../WorldMap'))
 
+/** A stale tab can fail to fetch the map's code after a redeploy; keep that to this panel instead of a blank page. */
+class MapBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  render() {
+    return this.state.failed
+      ? <EmptyState text="The map couldn’t load" hint="Reload the page to try again. The table below has the same numbers." />
+      : this.props.children
+  }
+}
+
 function MapPanel() {
   const api = useApi()
   const { query, key, clauses, addFilter } = useView()
@@ -41,12 +54,14 @@ function MapPanel() {
     <Panel title="Where visitors are" subtitle="Unique visitors by country. Click a country to filter the whole dashboard by it." actions={<BreakdownCsv dim="country" />}>
       <QueryView q={q} isEmpty={(r) => r.length === 0} skeleton={<Skeleton className="aspect-[960/470] w-full" />} empty={<EmptyState />}>
         {(rows) => (
-          <Suspense fallback={<Skeleton className="aspect-[960/470] w-full" />}>
-            <WorldMap
-              data={rows.map((r) => ({ code: r.value, value: r.visitors }))}
-              onSelect={(code) => { if (!(active?.op === 'is' && active.values.includes(code))) addFilter('country', code) }}
-            />
-          </Suspense>
+          <MapBoundary>
+            <Suspense fallback={<Skeleton className="aspect-[960/470] w-full" />}>
+              <WorldMap
+                data={rows.map((r) => ({ code: r.value, value: r.visitors }))}
+                onSelect={(code) => { if (!(active?.op === 'is' && active.values.includes(code))) addFilter('country', code) }}
+              />
+            </Suspense>
+          </MapBoundary>
         )}
       </QueryView>
     </Panel>
