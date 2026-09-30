@@ -20,7 +20,7 @@
       <h1>Privacy Policy</h1>
       <p class="meta">Effective September 30, 2026</p>
 
-      <p>This policy explains what Open Swarm Inc. ("Open Swarm", "we", "us") collects when you visit openswarm.com or join our waitlist, how we use it, and the choices you have. It covers this website and our waitlist emails. It does not cover the Open Swarm desktop app, which has its own terms.</p>
+      <p>This policy explains what Open Swarm Inc. ("Open Swarm", "we", "us") collects when you visit openswarm.com or join our waitlist, how we use it, and the choices you have. It covers this website, our waitlist emails, and how the OpenSwarm app handles data from Google accounts you connect to it (see <a href="#google-user-data">Google user data in the OpenSwarm app</a>). Use of the OpenSwarm app is also governed by its license agreement.</p>
 
       <h2 id="what-we-collect">What we collect</h2>
       <h3>Information you give us</h3>
@@ -53,12 +53,34 @@
       <p>If you join the waitlist, we will email you about early access, invitations and product updates. Every marketing email includes an unsubscribe link, and you can unsubscribe at any time. <strong>We do not sell your email address or share it with third parties for their own marketing.</strong></p>
       <p>To understand whether our emails are useful, we measure whether an email was opened (using a tiny image that loads when the email is displayed) and whether its main button was clicked (the button passes briefly through our website). We record this against the email we sent you, not your browsing elsewhere. You can prevent open measurement by turning off automatic image loading in your email app. If an email is sent through our backup delivery provider, that provider also reports whether it was delivered or bounced.</p>
 
+      <h2 id="google-user-data">Google user data in the OpenSwarm app</h2>
+      <p>The OpenSwarm app lets you connect your Google account so its agents can work with your Google services when you ask them to. This section explains how the app handles that data. We will add more detail here as the app develops.</p>
+
+      <h3>What the app accesses and why</h3>
+      <p>The app asks for access when you connect a Google service, and uses it only for the tasks you ask its agents to do. Depending on the features you use, this can include reading, drafting, sending and organizing email in Gmail; viewing and managing events in Google Calendar; and finding, reading, creating and editing files in Google Drive, Docs, Sheets and Slides. Google shows you the exact permissions before you connect.</p>
+
+      <h3>How it is used and where it goes</h3>
+      <ul>
+        <li>Data an agent reads from a connected Google service, such as an email, calendar event or file, is used on your computer for the task you asked for. It is not copied to OpenSwarm's servers for storage.</li>
+        <li>To complete a task, the content involved becomes part of your conversation with the agent and is sent to the AI model provider that powers the agent, to generate the response.</li>
+        <li>If you turn on usage sharing in the app, conversation data, which can include content from your Google services, is sent to OpenSwarm to help us understand and improve the app. Message text is deleted after 30 days, after which only counts remain. Access to shared conversation data is limited to authorized staff, and every access is logged.</li>
+        <li>We do not sell Google user data or use it for advertising, and we do not use it to train generalized AI or machine learning models.</li>
+      </ul>
+
+      <h3>Storage and deletion</h3>
+      <ul>
+        <li>The sign-in token for each connected Google service is stored on your computer and is the only Google credential OpenSwarm holds. OpenSwarm's servers help complete the sign-in but do not keep your Google data.</li>
+        <li>Disconnecting a Google service in the app's Settings deletes its sign-in token from your computer. You can also remove OpenSwarm's access at any time from your Google Account at <a href="https://myaccount.google.com/permissions" rel="noreferrer">myaccount.google.com/permissions</a>.</li>
+        <li>To ask us to delete data we hold, email <a href="mailto:privacy@openswarm.com">privacy@openswarm.com</a>.</li>
+      </ul>
+
       <h2 id="sharing">How information is shared</h2>
       <p>We share information only with service providers that help us operate, under contracts that limit their use of it:</p>
       <ul>
         <li>Vercel (website hosting and approximate location), Supabase (database), and Cloudflare (bot protection and content delivery).</li>
         <li>Google Workspace (our email sender) and Resend (a backup email delivery provider), when we send waitlist emails.</li>
         <li>X, through the advertising pixel described above, unless you opt out.</li>
+        <li>AI model providers, to process conversations in the OpenSwarm app as described in <a href="#google-user-data">Google user data in the OpenSwarm app</a>.</li>
       </ul>
       <p>We may also disclose information if required by law, to protect rights and safety, or as part of a merger or acquisition, subject to this policy.</p>
 
