@@ -140,6 +140,14 @@ test('ingest, signup attribution and the admin API on a real database', { skip }
     const engagement = await asUser<{ sections: { section: string, sessions: number }[] }>(database, admin, 'SELECT public.admin_engagement($1, $2)', [from, to])
     assert.equal(engagement.sections.find((row) => row.section === 'top')?.sessions, 1)
 
+    // Everyone left at the top section: the signup session only reported "top".
+    const overlay = await asUser<{ sessions: number, sections: { section: string, reached: number, exited: number, exited_without_signup: number }[] }>(
+      database, admin, 'SELECT public.admin_page_overlay($1, $2)', [from, to])
+    assert.equal(overlay.sessions, 3)
+    assert.deepEqual(overlay.sections.slice(0, 2).map((row) => [row.section, row.reached, row.exited, row.exited_without_signup]),
+      [['top', 3, 3, 2], ['intro', 0, 0, 0]])
+    await assert.rejects(asUser(database, 'intruder@example.com', 'SELECT public.admin_page_overlay($1, $2)', [from, to]), /Admin access required/)
+
     const realtime = await asUser<{ active_visitors: number }>(database, admin, 'SELECT public.admin_realtime()')
     assert.equal(realtime.active_visitors, 2)
 

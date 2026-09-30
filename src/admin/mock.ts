@@ -5,7 +5,7 @@
 import type { AdminApi } from './api'
 import { ApiError } from './api'
 import type {
-  AdminSettings, Annotation, AuditEntry, EmailEngagement, EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
+  AdminSettings, Annotation, AuditEntry, EmailEngagement, PageOverlay, EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
   Kpis, Overview, Performance, RangeQuery, Realtime, RealtimeEvent, Referrals, SectionKey, SettingValues, SignupRow, TimeseriesPoint, VitalRow, WelcomeEmail,
 } from './types'
 import { NONE } from './types'
@@ -267,6 +267,27 @@ const PLACEMENTS = [
 const TABS = [['use-cases: Sales', 30], ['use-cases: Research', 26], ['use-cases: Content', 20], ['use-cases: Operations', 14], ['use-cases: Personal', 10], ['capabilities: Browser', 12], ['capabilities: Files', 8]] as const
 const CLICKS = [['hero:join', 30], ['nav:join', 16], ['hero:watch-demo', 14], ['nav:marketplace', 10], ['closing:join', 12], ['marketplace:lead-finder', 6], ['marketplace:problem-validator', 4], ['nav:logo', 4], ['footer:privacy', 2], ['footer:terms', 1]] as const
 const OUTBOUND = [['https://x.com/openswarm', 40], ['https://github.com/openswarm', 25], ['https://discord.gg/openswarm', 20], ['https://www.producthunt.com/posts/open-swarm', 10], ['https://www.youtube.com/@openswarm', 5]] as const
+/** Mock click names mapped onto the real page's tracking targets (a few are left unresolvable on purpose). */
+const OVERLAY_TARGETS: Record<string, string> = {
+  'nav:join': 'waitlist-link:nav',
+  'hero:watch-demo': 'anchor:product',
+  'nav:marketplace': 'anchor:marketplace',
+  'closing:join': 'anchor:top',
+  'nav:logo': 'anchor:top',
+  'marketplace:lead-finder': 'waitlist-link:marketplace:lead-finder',
+  'marketplace:problem-validator': 'waitlist-link:marketplace:problem-validator',
+  'footer:privacy': 'anchor:capabilities',
+  'footer:terms': 'anchor:use-cases',
+  'hero:join': 'hero:join',
+}
+const OVERLAY_HREFS: Record<string, string> = {
+  'https://x.com/openswarm': 'x.com/openswarm',
+  'https://discord.gg/openswarm': 'discord.gg/NRzxNZW5hH',
+  'https://github.com/openswarm': 'github.com/openswarm',
+  'https://www.producthunt.com/posts/open-swarm': 'www.joinef.com/',
+  'https://www.youtube.com/@openswarm': 'www.youtube.com/@openswarm',
+}
+
 const ERROR_REASONS = [['invalid_email', 45], ['empty', 14], ['429', 16], ['400', 8], ['500', 5], ['503', 3]] as const
 
 const FIRST = ['alex', 'sam', 'jordan', 'maya', 'priya', 'chen', 'lucas', 'emma', 'noah', 'olivia', 'ravi', 'sofia', 'liam', 'ava', 'kenji', 'lea', 'omar', 'zoe', 'dan', 'nina']
@@ -1192,6 +1213,44 @@ export function createMockApi(): AdminApi {
       const i = annotations.findIndex((x) => x.id === id)
       if (i >= 0) annotations.splice(i, 1)
       audited('delete_annotation', { id })
+    }),
+
+    pageOverlay: (q) => delay((): PageOverlay => {
+      const s = eventWindow(q)
+      const n = Math.max(s.length, 1)
+      const sections = SECTIONS.map((section, i) => {
+        const reached = s.filter((x) => x.section >= i).length
+        const exited = s.filter((x) => x.section === i).length
+        return {
+          section, ord: i + 1, reached, reach_rate: r4(reached / n), exited,
+          exited_without_signup: s.filter((x) => x.section === i && !x.converted).length,
+          exit_rate: reached ? r4(exited / reached) : 0,
+        }
+      })
+      const tally = (items: string[][]) => {
+        const m = new Map<string, { clicks: number; sessions: number }>()
+        items.forEach((list) => {
+          const seen = new Set<string>()
+          for (const k of list) {
+            const row = m.get(k) ?? { clicks: 0, sessions: 0 }
+            row.clicks++
+            if (!seen.has(k)) row.sessions++
+            seen.add(k)
+            m.set(k, row)
+          }
+        })
+        return [...m.entries()].map(([k, v]) => ({ k, ...v })).sort((x, y) => y.clicks - x.clicks)
+      }
+      return {
+        sessions: s.length,
+        sections,
+        scroll: [25, 50, 75, 90, 100].map((depth) => {
+          const c = s.filter((x) => x.max_scroll >= depth).length
+          return { depth, sessions: c, rate: r4(c / n) }
+        }),
+        clicks: tally(s.map((x) => x.clicks.map((c) => OVERLAY_TARGETS[c] ?? c))).map(({ k, ...v }) => ({ target: k, ...v })),
+        outbound: tally(s.map((x) => x.outbound.map((o) => OVERLAY_HREFS[o] ?? o.replace(/^https?:\/\//, '')))).map(({ k, ...v }) => ({ href: k, ...v })),
+      }
     }),
 
     emailEngagement: (r) => delay((): EmailEngagement => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ComponentType } from 'react'
 import {
-  Activity, Filter, Gauge, LayoutDashboard, LogOut, Mail, MousePointerClick, Settings as SettingsIcon, Share2, Signpost, UserPlus, Users,
+  Activity, Filter, Gauge, Layers, LayoutDashboard, LogOut, Mail, MousePointerClick, Settings as SettingsIcon, Share2, Signpost, UserPlus, Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useRoute, type Page } from './nav'
@@ -8,6 +8,7 @@ import { useView } from './hooks'
 import { CompareSelect, DateRangePicker, FilterChips, RefreshButton } from './Toolbar'
 import { DATA_CAVEATS } from './definitions'
 import { EmailPage } from './pages/Email'
+import { OverlayPage } from './pages/Overlay'
 import { Overview } from './pages/Overview'
 import { Realtime } from './pages/Realtime'
 import { Traffic } from './pages/Traffic'
@@ -35,6 +36,7 @@ const NAV: PageDef[] = [
   { id: 'traffic', label: 'Traffic', icon: Signpost, description: 'Where visitors come from.', toolbar: 'full', Component: Traffic },
   { id: 'audience', label: 'Audience', icon: Users, description: 'Who the visitors are.', toolbar: 'full', Component: Audience },
   { id: 'behavior', label: 'Behavior', icon: MousePointerClick, description: 'What visitors see and do on the page.', toolbar: 'full', Component: Behavior },
+  { id: 'overlay', label: 'Page overlay', icon: Layers, description: 'Where on the landing page visitors leave, scroll to and click, drawn on the page itself.', toolbar: 'full', Component: OverlayPage },
   { id: 'funnel', label: 'Funnel', icon: Filter, description: 'From first visit to joining and sharing.', toolbar: 'full', Component: FunnelPage },
   { id: 'signups', label: 'Signups', icon: UserPlus, description: 'Everyone who joined the waitlist in this range.', toolbar: 'range', Component: Signups },
   { id: 'email', label: 'Email', icon: Mail, description: 'Welcome email delivery, unsubscribes and signup email domains.', toolbar: 'range', Component: EmailPage },

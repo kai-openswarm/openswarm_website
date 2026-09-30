@@ -222,8 +222,13 @@ async function observeVitals() {
 }
 
 /** Starts tracking once per page load. Visiting with ?internal=1 marks this browser as the team's. */
+/** The dashboard's page overlay loads the site in a frame; those views are not visits. */
+export function isFramed() {
+  try { return window.self !== window.top } catch { return true }
+}
+
 export function startAnalytics() {
-  if (started || typeof window === 'undefined') return
+  if (started || typeof window === 'undefined' || isFramed()) return
   const params = new URLSearchParams(window.location.search)
   if (params.get('internal') === '1') write(INTERNAL_KEY, '1')
   if (params.get('internal') === '0') write(INTERNAL_KEY, null)

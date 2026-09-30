@@ -16,17 +16,17 @@ function render(message = '') {
   if (optIn) optIn.hidden = !optedOut || gpc
   if (status) {
     status.textContent = message || (gpc
-      ? 'Your browser sends a Global Privacy Control signal, so advertising tracking is off.'
-      : optedOut ? 'Advertising tracking is off in this browser.' : 'Advertising tracking is on in this browser.')
+      ? 'Your browser sends a Global Privacy Control signal, so advertising tracking and session recordings are off.'
+      : optedOut ? 'Advertising tracking and session recordings are off in this browser.' : 'Advertising tracking and session recordings are on in this browser.')
   }
 }
 
 optOut?.addEventListener('click', () => {
   try { localStorage.setItem(AD_OPT_OUT_KEY, '1') } catch { /* Blocked storage already prevents the pixel from being remembered. */ }
-  render('Done. Advertising tracking is off in this browser. Reload any open Open Swarm pages to apply it.')
+  render('Done. Advertising tracking and session recordings are off in this browser. Reload any open Open Swarm pages to apply it.')
 })
 optIn?.addEventListener('click', () => {
   try { localStorage.removeItem(AD_OPT_OUT_KEY) } catch { /* Nothing to undo. */ }
-  render('Advertising tracking is on in this browser.')
+  render('Advertising tracking and session recordings are on in this browser.')
 })
 render()

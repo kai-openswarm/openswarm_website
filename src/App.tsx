@@ -4,6 +4,7 @@ import { MotionConfig } from 'motion/react'
 import { setLenis } from './lib/scroll'
 import { installXPixel } from './lib/x-pixel'
 import { startAnalytics } from './lib/analytics'
+import { startReplays } from './lib/replay'
 import { Nav } from './components/Nav'
 import { Hero } from './components/Hero'
 import { Intro } from './components/Intro'
@@ -17,6 +18,7 @@ export default function App() {
   useEffect(() => {
     startAnalytics()
     installXPixel()
+    startReplays()
   }, [])
 
   useEffect(() => {

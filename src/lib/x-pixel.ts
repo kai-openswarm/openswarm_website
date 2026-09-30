@@ -73,7 +73,7 @@ export function trackXSignup() {
 }
 
 export function installXPixel() {
-  if (installed || typeof window === 'undefined' || !adTrackingAllowed()) return
+  if (installed || typeof window === 'undefined' || !adTrackingAllowed() || window.self !== window.top) return
   const hostname = window.location.hostname.toLowerCase().replace(/\.$/, '')
   // Keep local waitlist testing local; ad scripts can inspect form interactions.
   if (

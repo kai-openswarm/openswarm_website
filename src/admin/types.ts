@@ -412,3 +412,22 @@ export interface EmailEngagement {
   resend_events: number
   tests: { opens: number; clicks: number }
 }
+
+export interface PageOverlay {
+  sessions: number
+  /** In page order. exited = sessions whose deepest section was this one; exit_rate = exited ÷ reached. */
+  sections: {
+    section: SectionKey
+    ord: number
+    reached: number
+    reach_rate: number
+    exited: number
+    exited_without_signup: number
+    exit_rate: number
+  }[]
+  scroll: { depth: number; sessions: number; rate: number }[]
+  /** target is a data-track value (e.g. "waitlist-link:nav") or "anchor:<id>". */
+  clicks: { target: string; clicks: number; sessions: number }[]
+  /** href is host + path, e.g. "x.com/openswarm". */
+  outbound: { href: string; clicks: number; sessions: number }[]
+}
