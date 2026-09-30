@@ -3,5 +3,13 @@
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
-  ]
+  ],
+  // Used by Vercel when it compiles api/ and server/ into functions: emitted .js files
+  // must import each other as .js, not by the .ts paths the source uses.
+  "compilerOptions": {
+    "module": "nodenext",
+    "target": "es2023",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true
+  }
 }
