@@ -4,6 +4,8 @@ import { createCollectHandler, parseUserAgent, type AnalyticsStore } from './ana
 import { RequestError, clientIp, hashValue, hashingSecret, header, originAllowed, requestGeo } from './http.ts'
 import { createPostgresAnalyticsStore } from './postgres-analytics.ts'
 import { createPostgresWaitlistStore } from './postgres-waitlist.ts'
+import { createUnsubscribeHandler, publicOrigin, sendWelcomeEmail, unsubscribeUrl } from './email.ts'
+import { cachedSignupConfig } from './signup-config.ts'
 import { SUPABASE_ROOT_CA } from './supabase-ca.ts'
 import { createWaitlistMiddleware, type WaitlistOptions, type WaitlistStore } from './waitlist.ts'
 
@@ -86,16 +88,29 @@ export async function verifyTurnstile(token: string | undefined, request: Incomi
   }
 }
 
+/** Welcome email and its log entry. Failures are logged, never surfaced to the visitor. */
+export function welcomeSender(database: Pick<Pool, 'query'>, secret = hashingSecret()): NonNullable<WaitlistOptions['afterSignup']> {
+  return async ({ email, referral, config }, request) => {
+    if (!config.welcome_email.enabled) return
+    const origin = publicOrigin(request)
+    const invite = new URL('/', origin)
+    invite.searchParams.set('ref', referral.code)
+    const result = await sendWelcomeEmail(config.welcome_email, email, invite.toString(), unsubscribeUrl(origin, referral.code, secret))
+    await database.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [referral.code, 'welcome', result.status, result.providerId ?? null, result.detail ?? null])
+  }
+}
+
 /** Origin checks, per-network rate limits, bot challenge and signup context for hosted requests. */
 export function productionWaitlistOptions(analytics: AnalyticsStore, secret = hashingSecret()): WaitlistOptions {
   const network = (request: IncomingMessage) => hashValue(clientIp(request), secret)
   return {
-    async guard(request, action) {
+    async guard(request, action, config) {
       if (action === 'stats') return
       if (!originAllowed(request)) throw new RequestError(403, 'This request was blocked. Please refresh and try again.')
       const key = network(request)
       const allowed = action === 'signup'
-        ? await analytics.hit(`signup:${key}`, 3600, 10) && await analytics.hit(`signup-day:${key}`, 86_400, 40)
+        ? await analytics.hit(`signup:${key}`, 3600, config?.signup_limit_per_hour ?? 10)
+          && await analytics.hit(`signup-day:${key}`, 86_400, config?.signup_limit_per_day ?? 40)
         : await analytics.hit(`referral:${key}`, 60, 60)
       if (!allowed) throw new RequestError(429, 'Too many attempts. Please wait a few minutes and try again.')
     },
@@ -116,10 +131,11 @@ export function handleProductionWaitlist(request: IncomingMessage, response: Ser
   if (!productionHandler) {
     const database = productionPool()
     if (!database) return createProductionWaitlistHandler(unavailable)(request, response)
-    productionHandler = createProductionWaitlistHandler(
-      createPostgresWaitlistStore(database),
-      productionWaitlistOptions(createPostgresAnalyticsStore(database)),
-    )
+    productionHandler = createProductionWaitlistHandler(createPostgresWaitlistStore(database), {
+      ...productionWaitlistOptions(createPostgresAnalyticsStore(database)),
+      config: cachedSignupConfig(async () => (await database.query('SELECT analytics.signup_config() AS config')).rows[0]?.config),
+      afterSignup: welcomeSender(database),
+    })
   }
   return productionHandler(request, response)
 }
@@ -137,4 +153,17 @@ export function handleProductionCollect(request: IncomingMessage, response: Serv
     collectHandler = createCollectHandler(createPostgresAnalyticsStore(database))
   }
   return collectHandler(request, response)
+}
+
+let unsubscribeHandler: ReturnType<typeof createUnsubscribeHandler> | undefined
+
+export function handleUnsubscribe(request: IncomingMessage, response: ServerResponse) {
+  if (!unsubscribeHandler) {
+    const database = productionPool()
+    unsubscribeHandler = createUnsubscribeHandler(async (code) => {
+      if (!database) throw new Error('A database connection is required.')
+      return (await database.query<{ ok: boolean }>('SELECT analytics.unsubscribe($1) AS ok', [code])).rows[0]?.ok === true
+    })
+  }
+  return unsubscribeHandler(request, response)
 }

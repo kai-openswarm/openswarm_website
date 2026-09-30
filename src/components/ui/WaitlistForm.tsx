@@ -12,7 +12,7 @@ import { LINKS } from '@/lib/utils'
 import { analyticsIds, flush, track } from '@/lib/analytics'
 import { trackXSignup } from '@/lib/x-pixel'
 import { prepareTurnstile, turnstileToken } from '@/lib/turnstile'
-import { WAITLIST_JOINED_EVENT } from '@/lib/waitlist-count'
+import { WAITLIST_JOINED_EVENT, useWaitlistStats } from '@/lib/waitlist-count'
 
 /** Stored with each signup. Change it whenever the wording under the form changes. */
 const CONSENT_VERSION = 'email-2026-09-30'
@@ -20,6 +20,11 @@ const CONSENT_VERSION = 'email-2026-09-30'
 export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
+  const stats = useWaitlistStats()
+  // The server may report signups paused after this page loaded; its message wins.
+  const [closedMessage, setClosedMessage] = useState('')
+  const paused = !stats.signupsOpen || !!closedMessage
+  const pausedMessage = closedMessage || stats.closedMessage || 'The waitlist is paused right now.'
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle')
   const [referral, setReferral] = useState<Referral | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -116,7 +121,13 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
       if (activeRequest.current !== request) return
       if (!response.ok || !result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) {
         track('waitlist_fail', { placement, status: String(response.status) })
-        throw new Error(response.status === 429 ? 'rate_limited' : 'Signup unavailable')
+        const message = result && typeof result === 'object' && 'error' in result && typeof result.error === 'string' ? result.error.slice(0, 200) : ''
+        if (response.status === 403 && result && typeof result === 'object' && 'closed' in result && result.closed === true) {
+          setClosedMessage(message || 'The waitlist is paused right now.')
+          throw new Error('closed')
+        }
+        // Validation and rate-limit messages are written for visitors; other failures stay generic.
+        throw new Error([400, 403, 429].includes(response.status) && message ? `show:${message}` : 'Signup unavailable')
       }
       const added = response.status === 201
       track('waitlist_success', { placement, source: source.current, added, invited: !!invitedBy })
@@ -136,7 +147,9 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
     } catch (failure) {
       if (activeRequest.current !== request) return
       setStatus('idle')
-      setError(failure instanceof Error && failure.message === 'rate_limited' ? 'Too many attempts. Wait a few minutes and try again.' : 'Couldn’t join. Try again.')
+      const reason = failure instanceof Error ? failure.message : ''
+      if (reason === 'closed') return
+      setError(reason.startsWith('show:') ? reason.slice(5) : 'Couldn’t join. Try again.')
     } finally {
       pending.current = false
       window.clearTimeout(timeout)
@@ -176,9 +189,9 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
               value={email}
               maxLength={254}
               required
-              disabled={status === 'submitting'}
+              disabled={status === 'submitting' || paused}
               aria-invalid={!!error}
-              aria-describedby={`${id}-hint ${id}-consent${error ? ` ${id}-error` : ''}`}
+              aria-describedby={`${id}-hint ${id}-consent${error || paused ? ` ${id}-error` : ''}`}
               onFocus={() => {
                 prepareTurnstile()
                 if (started.current) return
@@ -187,19 +200,20 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
               }}
               onChange={(event) => { setEmail(event.target.value); if (error) setError('') }}
             />
-          <LiquidMetalButton type="submit" disabled={status === 'submitting'} className="relative disabled:cursor-wait disabled:opacity-75">
+          <LiquidMetalButton type="submit" disabled={status === 'submitting' || paused} className="relative disabled:cursor-wait disabled:opacity-75">
             <span className={status === 'submitting' ? 'invisible flex items-center gap-2' : 'flex items-center gap-2'} aria-hidden={status === 'submitting' || undefined}><RollText>Join free waitlist</RollText><ArrowRight size={20} strokeWidth={1.8} aria-hidden className="liquid-action-arrow hidden min-[440px]:block" /></span>
             {status === 'submitting' && <span className="absolute inset-0 flex items-center justify-center gap-2" role="status"><LoaderCircle size={15} strokeWidth={1.75} aria-hidden className="motion-safe:animate-spin" /><span>Joining…</span></span>}
           </LiquidMetalButton>
           <div className="absolute inset-x-0 top-full mt-2 text-center text-[10.5px] leading-[1.4]">
-            {error && <p id={`${id}-error`} role="alert" className="text-[#9f2424]">{error}</p>}
-            <p id={`${id}-consent`} className={error ? 'sr-only' : 'text-ink/65'}>
+            {paused && <p id={`${id}-error`} role="status" className="font-medium text-ink/80">{pausedMessage}</p>}
+            {error && !paused && <p id={`${id}-error`} role="alert" className="text-[#9f2424]">{error}</p>}
+            <p id={`${id}-consent`} className={error || paused ? 'sr-only' : 'text-ink/65'}>
               Early-access updates by email. Unsubscribe anytime.
               {' '}<a href={LINKS.privacy} className="underline decoration-black/25 underline-offset-2 hover:text-ink">Privacy</a>
               {' · '}<a href={LINKS.terms} className="underline decoration-black/25 underline-offset-2 hover:text-ink">Terms</a>
             </p>
             <p id={`${id}-hint`} className="sr-only">Enter your email address to receive early-access updates.</p>
-            {!error && <p className="mt-0.5 text-ink/70 opacity-0 transition-opacity group-focus-within/form:opacity-100">Just launch updates. No spam.</p>}
+            {!error && !paused && <p className="mt-0.5 text-ink/70 opacity-0 transition-opacity group-focus-within/form:opacity-100">Just launch updates. No spam.</p>}
           </div>
         </form>
       )}

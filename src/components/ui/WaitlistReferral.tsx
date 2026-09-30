@@ -119,7 +119,7 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(link)
-      track('referral_copy')
+      track('referral_copy', { channel: 'copy' })
       setCopied(true)
       setFeedback('Invite link copied.')
       if (copyReset.current !== null) window.clearTimeout(copyReset.current)
@@ -134,7 +134,7 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
   async function shareLink() {
     try {
       await navigator.share({ title: 'Everyone gets a Jarvis now.', text: 'Join me on the free Open Swarm waitlist. Your free AI desktop for Mac.', url: link })
-      track('referral_share')
+      track('referral_share', { channel: 'native' })
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return
       await copyLink()

@@ -39,7 +39,8 @@ GET  /api/stats    ── public waitlist count = admin baseline + real signups 
 | `waitlist_submit` | Valid email submitted | `placement`, `source`, `invited` |
 | `waitlist_success` | API accepted the signup | `placement`, `source`, `added` (false for an existing email), `invited` |
 | `waitlist_fail` | API rejected or failed | `placement`, `status` |
-| `referral_open` / `referral_copy` / `referral_share` | Invite dialog actions | `just_joined` on open |
+| `referral_open` / `referral_copy` / `referral_share` | Invite dialog actions | `just_joined` on open; `channel` (`copy`, `native`) on copy and share |
+| `invite_visit` | Page load with a valid `?ref=` | `code` (the inviter's share code), used for the referral loop and K-factor |
 | `vital` | Core Web Vitals (LCP, INP, CLS, FCP, TTFB) | `name`, `value`, `rating` |
 | `error` | Uncaught error or rejection, at most 5 per page | `message`, `source` |
 
@@ -53,14 +54,28 @@ Applied in order in `classifyTraffic` (`server/analytics.ts`): paid (`utm_medium
 
 ## One-time setup
 
-1. **Database.** In the Supabase SQL editor (or `psql` with the direct connection string), run `sql/001_waitlist.sql`, `sql/002_email_waitlist.sql` and then `sql/003_analytics.sql`. All are safe to re-run. The last one seeds the four admin emails and schedules the retention job.
+1. **Database.** In the Supabase SQL editor, or with `supabase db query --linked -f <file>`, run `sql/001_waitlist.sql` through `sql/005_admin_features.sql` in order. All are safe to re-run. `003` seeds the four admin emails and schedules the retention job. `004` creates the least-privilege `openswarm_api` role the website connects as; give it a generated password with `ALTER ROLE openswarm_api LOGIN PASSWORD '…'` and use that in `DATABASE_URL`. `005` adds the email signup settings, annotations and the extra dashboard functions.
 2. **Auth.** In Supabase → Authentication:
    - Disable "Allow new users to sign up". Admin logins are created by the allowlist, not by visitors.
    - Set the Site URL to `https://openswarm.com` and add `https://openswarm.com/admin/` (plus any preview domain's `/admin/`) to the redirect URLs.
    - Create logins for the four admins (Authentication → Users → Add user → "Send magic link", or invite from the dashboard's Settings page once one admin can sign in).
    - For reliable sign-in email delivery, configure custom SMTP (for example Resend). Supabase's built-in sender is rate-limited.
-3. **Vercel environment variables** (Production and Preview): `DATABASE_URL` (transaction pooler, port 6543), `ANALYTICS_SALT`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`, `VITE_X_SIGNUP_EVENT_ID`, `ALLOWED_ORIGINS`. See `.env.example`.
+3. **Vercel environment variables** (Production and Preview): `DATABASE_URL` (transaction pooler, port 6543, user `openswarm_api.<project-ref>`), `ANALYTICS_SALT`, `RESEND_API_KEY` (for welcome emails), `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`, `VITE_X_SIGNUP_EVENT_ID`, `ALLOWED_ORIGINS`. See `.env.example`.
 4. **Deploy** and check that `/api/stats` returns a count, a page view appears under Real-time, and a test signup shows its channel on the Signups page.
+
+## Email signup settings
+
+Admins change these in **Settings → Email signup**; the API reads them at most every 30 seconds.
+
+| Setting | Effect |
+| --- | --- |
+| Signups open | When off, the form shows the closed message and the API rejects new signups with it. Existing invite links and referral progress keep working. |
+| Blocked domains | Rejects addresses at these domains and their subdomains. |
+| Block disposable email | Rejects about 9,000 known throwaway-email domains (`disposable-email-domains-js`). |
+| Signup limits | New signups allowed per network (hashed IP) per hour and per day. |
+| Welcome email | Sent through Resend after each new signup when enabled. `{{invite_link}}` becomes the person's invite link. An unsubscribe link and the postal address are always appended, with one-click `List-Unsubscribe` headers. Delivery results appear in the Email report. |
+
+Unsubscribe links (`/api/unsubscribe`) are signed with `ANALYTICS_SALT`, so changing that secret invalidates links in emails already sent. Opening a link shows a confirmation button; mail clients' one-click unsubscribe posts directly. Unsubscribed signups keep their place on the waitlist and are marked with `unsubscribed_at`; any future email sender must skip them.
 
 ## Advertising pixel
 

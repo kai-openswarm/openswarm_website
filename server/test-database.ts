@@ -3,11 +3,20 @@ import { readFile } from 'node:fs/promises'
 import { Pool } from 'pg'
 
 export const BASE_MIGRATIONS = ['../sql/test/supabase-stub.sql', '../sql/001_waitlist.sql']
-export const LATER_MIGRATIONS = ['../sql/002_email_waitlist.sql', '../sql/003_analytics.sql', '../sql/004_api_role.sql']
+export const LATER_MIGRATIONS = ['../sql/002_email_waitlist.sql', '../sql/003_analytics.sql', '../sql/004_api_role.sql', '../sql/005_admin_features.sql']
 
 /** A pool connected as the least-privilege website role, as the hosted API is. */
 export async function connectAsApiRole(database: Pool) {
-  await database.query("ALTER ROLE openswarm_api LOGIN PASSWORD 'test-only'")
+  // Roles are shared by every database on the server; parallel test files may race here.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await database.query("ALTER ROLE openswarm_api LOGIN PASSWORD 'test-only'")
+      break
+    } catch (error) {
+      if (attempt >= 5 || !/concurrently updated/.test(String(error))) throw error
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)))
+    }
+  }
   const { rows } = await database.query<{ name: string }>('SELECT current_database() AS name')
   const url = new URL(process.env.TEST_DATABASE_URL!)
   url.pathname = `/${rows[0].name}`

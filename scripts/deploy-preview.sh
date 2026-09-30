@@ -48,10 +48,13 @@ items = [
     'index.html', 'vite.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'vercel.json',
 ]
 required = [
-    'api/waitlist.ts', 'api/waitlist/referral.ts', 'api/collect.ts', 'api/stats.ts', 'api/admin/invite.ts',
+    'api/waitlist.ts', 'api/waitlist/referral.ts', 'api/collect.ts', 'api/stats.ts', 'api/unsubscribe.ts',
+    'api/admin/invite.ts', 'api/admin/test-email.ts',
     'server/production-waitlist.ts', 'server/postgres-waitlist.ts', 'server/postgres-analytics.ts',
-    'server/analytics.ts', 'server/admin-invite.ts', 'server/http.ts', 'server/waitlist.ts',
-    'sql/001_waitlist.sql', 'sql/002_email_waitlist.sql', 'sql/003_analytics.sql',
+    'server/analytics.ts', 'server/admin-api.ts', 'server/email.ts', 'server/signup-config.ts', 'server/supabase-ca.ts',
+    'server/http.ts', 'server/waitlist.ts',
+    'sql/001_waitlist.sql', 'sql/002_email_waitlist.sql', 'sql/003_analytics.sql', 'sql/004_api_role.sql',
+    'sql/005_admin_features.sql',
 ]
 for name in items + required:
     candidate = root / name
@@ -145,7 +148,7 @@ from pathlib import Path
 output = Path(sys.argv[1])
 if not (output / 'static' / 'index.html').is_file():
     raise SystemExit('Vercel did not produce the website. Nothing has been deployed.')
-for name in ('api/waitlist', 'api/waitlist/referral', 'api/collect', 'api/stats', 'api/admin/invite'):
+for name in ('api/waitlist', 'api/waitlist/referral', 'api/collect', 'api/stats', 'api/unsubscribe', 'api/admin/invite', 'api/admin/test-email'):
     bundle = output / 'functions' / f'{name}.func'
     config_file = bundle / '.vc-config.json'
     if not config_file.is_file():

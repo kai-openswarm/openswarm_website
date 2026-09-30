@@ -75,6 +75,7 @@ cp .env.example .env.local
 | `DATABASE_URL` | Hosted API | Server-only Postgres connection string. For Supabase, use the transaction pooler (port 6543) |
 | `ANALYTICS_SALT` | Hosted API | Server-only secret for hashing client IPs used in rate limits; IPs are never stored |
 | `SUPABASE_SERVICE_ROLE_KEY` | Hosted API | Server-only key used by `/api/admin/invite` to create admin logins |
+| `RESEND_API_KEY` | Hosted API | Optional; sends the welcome email configured in the dashboard |
 | `TURNSTILE_SECRET_KEY` | Hosted API | Optional; when set, signups require a valid Turnstile token |
 | `ALLOWED_ORIGINS` | Hosted API | Optional comma-separated extra origins allowed to POST to the API |
 | `TEST_DATABASE_URL` | Test runner | Optional PostgreSQL server where the live integration tests may create and drop databases |
@@ -92,6 +93,8 @@ For end-to-end local referral checks, open `http://localhost:4310/?ref=<code>` u
 | `GET /api/stats` | None | Public waitlist count (admin-set baseline plus real signups), CDN-cached for 5 minutes |
 | `POST /api/collect` | Analytics batch from the browser tracker | Store page and interaction events; returns 204 |
 | `POST /api/admin/invite` | JSON `email` with an admin's Supabase bearer token | Add an admin and create their login |
+| `POST /api/admin/test-email` | JSON `welcome_email` template with an admin's bearer token | Send the welcome email to the signed-in admin |
+| `GET`/`POST /api/unsubscribe?c=<code>&t=<token>` | Signed link from an email | Confirm, then stop marketing emails for that signup |
 
 The form and API trim outer spaces and lowercase accepted email addresses. Dots and plus tags remain intact; provider-specific aliases are not merged. A new signup returns HTTP 201; an existing email returns HTTP 200 without changing its original referral attribution. Success responses contain referral metadata, never email addresses or phone numbers. Phone-only signup requests are no longer accepted.
 
@@ -109,7 +112,7 @@ Deploy the **repository root**, including `api/`, `server/`, and dependencies. U
 
 The included hosted entry points target Vercel's Node runtime. Before collecting hosted signups:
 
-1. In Supabase, deliberately apply [sql/001_waitlist.sql](sql/001_waitlist.sql), [sql/002_email_waitlist.sql](sql/002_email_waitlist.sql) and [sql/003_analytics.sql](sql/003_analytics.sql), in that order.
+1. In Supabase, deliberately apply the migrations in [sql/](sql/) in order, `001` through `005`, then set a password for the `openswarm_api` role (see [analytics setup](docs/analytics.md#one-time-setup)).
 2. Configure Supabase Auth for the admin dashboard as described in [analytics setup](docs/analytics.md#one-time-setup).
 3. Set the hosting project's server-only variables and the frontend variables above.
 4. Build and deploy the frontend together with all API routes. [vercel.json](vercel.json) holds the routing and security headers.

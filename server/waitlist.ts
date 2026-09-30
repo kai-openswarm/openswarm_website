@@ -7,6 +7,7 @@ import { normalizeEmail } from '../src/lib/email.ts'
 import { normalizePhone } from '../src/lib/phone.ts'
 import { RequestError, readBody, respond } from './http.ts'
 import { createLocalCollectMiddleware } from './analytics.ts'
+import { DEFAULT_SIGNUP_CONFIG, emailDomainRejected, type SignupConfig } from './signup-config.ts'
 
 type WaitlistEntry = {
   email?: string
@@ -43,11 +44,15 @@ export type WaitlistStore = {
 
 export type WaitlistOptions = {
   /** Runs before storage is touched; throws a RequestError to reject (origin, rate limit). */
-  guard?(request: IncomingMessage, action: 'signup' | 'referral' | 'stats'): Promise<void>
+  guard?(request: IncomingMessage, action: 'signup' | 'referral' | 'stats', config?: SignupConfig): Promise<void>
   /** Verifies a bot-challenge token when one is configured. */
   verifyHuman?(token: string | undefined, request: IncomingMessage): Promise<boolean>
   /** Server-derived signup details such as the hashed network and approximate location. */
   context?(request: IncomingMessage): SignupContext
+  /** Admin-editable signup settings: open/paused, blocked domains, limits, welcome email. */
+  config?(): Promise<SignupConfig>
+  /** Runs after a new signup is stored and before the response, e.g. the welcome email. Never fails the signup. */
+  afterSignup?(signup: { email: string, referral: ReferralStatus, config: SignupConfig }, request: IncomingMessage): Promise<void>
 }
 
 const MAX_BODY_BYTES = 4_096
@@ -226,8 +231,10 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
         await options.guard?.(request, 'stats')
         if (!store.displayCount) throw new RequestError(404, 'Not found.')
         const count = await store.displayCount()
+        const config = await options.config?.()
+        const signups = config ? { signupsOpen: config.signups_open, ...(config.signups_open ? {} : { closedMessage: config.signups_closed_message }) } : {}
         // Shared caches may serve this briefly; it changes with each signup, not per visitor.
-        respond(response, 200, { ok: true, count }, { 'Cache-Control': 'public, max-age=0, s-maxage=300, stale-while-revalidate=600' })
+        respond(response, 200, { ok: true, count, ...signups }, { 'Cache-Control': 'public, max-age=0, s-maxage=300, stale-while-revalidate=600' })
         return
       }
       if (isReferralRequest) {
@@ -265,7 +272,15 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
       if (referralCode !== undefined && !isReferralCode(referralCode)) {
         throw new RequestError(400, 'The invite code is invalid. Please refresh and try again.')
       }
-      await options.guard?.(request, 'signup')
+      const config = await options.config?.()
+      if (config && !config.signups_open) {
+        respond(response, 403, { ok: false, closed: true, error: config.signups_closed_message })
+        return
+      }
+      if (config && emailDomainRejected(email, config)) {
+        throw new RequestError(400, 'Please use a different email address. This email provider isn’t accepted.')
+      }
+      await options.guard?.(request, 'signup', config)
       if (options.verifyHuman && !await options.verifyHuman(typeof turnstileToken === 'string' ? turnstileToken : undefined, request)) {
         throw new RequestError(403, 'We couldn’t verify this request. Please refresh and try again.')
       }
@@ -278,6 +293,9 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
         ...(typeof consentVersion === 'string' && CONSENT_VERSION.test(consentVersion) ? { consentVersion } : {}),
       }
       const { added, referral } = await store.add(email, rawSource.trim(), referralCode, context)
+      if (added && config && options.afterSignup) {
+        await options.afterSignup({ email, referral, config }, request).catch(() => undefined)
+      }
       respond(response, added ? 201 : 200, { ok: true, referral })
     }
 
@@ -312,7 +330,8 @@ export function localWaitlistPlugin(): Plugin {
       }
     },
     configResolved(config) {
-      middleware = createWaitlistMiddleware(path.join(config.root, '.data', 'waitlist.json'))
+      // Local development uses the default signup settings (open, disposable domains blocked).
+      middleware = createWaitlistMiddleware(path.join(config.root, '.data', 'waitlist.json'), { config: async () => DEFAULT_SIGNUP_CONFIG })
       collect = createLocalCollectMiddleware(path.join(config.root, '.data', 'analytics.ndjson'))
     },
     configureServer(server) {

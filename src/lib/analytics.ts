@@ -234,6 +234,9 @@ export function startAnalytics() {
 
   visibleSince = document.visibilityState === 'visible' ? Date.now() : 0
   track('pageview')
+  // Links back to the inviter so the dashboard can measure each invite link's reach.
+  const invitedBy = params.get('ref')
+  if (invitedBy && /^[A-Za-z0-9_-]{32}$/.test(invitedBy)) track('invite_visit', { code: invitedBy })
   observeSections()
   observeScroll()
   observeClicks()
