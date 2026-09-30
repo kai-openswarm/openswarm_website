@@ -100,7 +100,7 @@ const EVENT_NAMES: Record<string, string> = {
   tab: 'Switched tab',
   waitlist_view: 'Saw signup form',
   waitlist_start: 'Started signup',
-  waitlist_submit: 'Submitted number',
+  waitlist_submit: 'Submitted email',
   waitlist_success: 'Joined waitlist',
   waitlist_error: 'Signup error',
   waitlist_fail: 'Signup failed',

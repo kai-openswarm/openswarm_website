@@ -715,7 +715,7 @@ export function createMockApi(): AdminApi {
         steps: [
           { key: 'visited', label: 'Visited', sessions: s.length },
           { key: 'saw_form', label: 'Saw the signup form', sessions: s.filter((x) => x.saw_form).length },
-          { key: 'started', label: 'Started entering a number', sessions: s.filter((x) => x.started).length },
+          { key: 'started', label: 'Started entering an email', sessions: s.filter((x) => x.started).length },
           { key: 'submitted', label: 'Submitted', sessions: s.filter((x) => x.submitted).length },
           { key: 'joined', label: 'Joined (new signup)', sessions: s.filter((x) => x.converted).length },
           { key: 'shared', label: 'Shared an invite', sessions: s.filter((x) => x.shared).length },
