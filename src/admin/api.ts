@@ -34,7 +34,8 @@ export interface AdminApi {
   /** Adds the email to the allowlist and creates its login (POST /api/admin/invite). */
   inviteAdmin(email: string): Promise<void>
   /** Sends the given (possibly unsaved) welcome email to the signed-in admin (POST /api/admin/test-email). */
-  testEmail(welcome: WelcomeEmail): Promise<void>
+  /** Resolves true when the test used the admin's own waitlist signup (real invite and unsubscribe links). */
+  testEmail(welcome: WelcomeEmail): Promise<boolean>
   annotations(r: Range): Promise<Annotation[]>
   addAnnotation(a: NewAnnotation): Promise<number>
   deleteAnnotation(id: number): Promise<void>
@@ -61,7 +62,7 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     return data as T
   }
   /** Admin endpoints on the website API authenticate with the Supabase access token. */
-  async function postAdmin(path: string, payload: unknown, failure: string): Promise<void> {
+  async function postAdmin(path: string, payload: unknown, failure: string): Promise<Record<string, unknown>> {
     const { data } = await sb.auth.getSession()
     const token = data.session?.access_token
     if (!token) throw new ApiError('Your session has expired. Sign in again.', '401')
@@ -75,8 +76,9 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     } catch {
       throw new ApiError('Could not reach the server. Check your connection and try again.')
     }
-    const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } & Record<string, unknown> | null
     if (!res.ok || !body?.ok) throw new ApiError(body?.error || `${failure} (${res.status}).`, String(res.status))
+    return body
   }
   const rq = (q: RangeQuery) => ({ p_from: q.from, p_to: q.to, p_filters: q.filters })
 
@@ -99,8 +101,8 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     settings: () => rpc('admin_settings'),
     updateSetting: (key, value) => rpc<void>('admin_update_setting', { p_key: key, p_value: value }),
     removeAdmin: (email) => rpc('admin_remove_admin', { p_email: email }),
-    inviteAdmin: (email) => postAdmin('/api/admin/invite', { email }, 'Invite failed'),
-    testEmail: (welcome) => postAdmin('/api/admin/test-email', { welcome_email: welcome }, 'Test email failed'),
+    inviteAdmin: async (email) => { await postAdmin('/api/admin/invite', { email }, 'Invite failed') },
+    testEmail: async (welcome) => (await postAdmin('/api/admin/test-email', { welcome_email: welcome }, 'Test email failed')).realLinks === true,
     annotations: (r) => rpc('admin_annotations', { p_from: r.from, p_to: r.to }),
     addAnnotation: (a) => rpc('admin_add_annotation', { p_starts_on: a.starts_on, p_ends_on: a.ends_on, p_title: a.title, p_color: a.color }),
     deleteAnnotation: (id) => rpc('admin_delete_annotation', { p_id: id }),

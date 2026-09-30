@@ -76,11 +76,19 @@ export function createTestEmailHandler(deps: AdminDeps, send: typeof sendWelcome
     const template = parseSignupConfig({ welcome_email: input.welcome_email }).welcome_email
     if (!template.from_email) throw new RequestError(400, 'Set a from address first.')
     const origin = publicOrigin(request)
-    const sample = 'x'.repeat(32)
-    const result = await send(template, caller, new URL(`/?ref=${sample}`, origin).toString(), unsubscribeUrl(origin, sample))
-    await deps.database.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [null, 'test', result.status, result.providerId ?? null, result.detail ?? null])
+    // Use the admin's own waitlist signup when there is one, so every link in the test works.
+    const own = (await deps.database.query<{ referral_code: string }>(
+      'SELECT referral_code FROM waitlist_signups WHERE email = $1', [caller],
+    )).rows[0]?.referral_code
+    const code = own ?? 'x'.repeat(32)
+    const sample = own ? template : {
+      ...template,
+      body: `${template.body}\n\n(Test email: ${caller} isn't on the waitlist, so the invite and unsubscribe links above are samples. Join the waitlist with this address to test real links.)`,
+    }
+    const result = await send({ ...sample, subject: `[Test] ${template.subject}` }, caller, new URL(`/?ref=${code}`, origin).toString(), unsubscribeUrl(origin, code))
+    await deps.database.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [own ?? null, 'test', result.status, result.providerId ?? null, result.detail ?? null])
     if (result.status !== 'sent') throw new RequestError(502, result.detail ?? 'The email provider rejected the message.')
-    return { ok: true, sentTo: caller }
+    return { ok: true, sentTo: caller, realLinks: !!own }
   })
 }
 

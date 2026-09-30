@@ -274,8 +274,10 @@ function WelcomeEmailForm({ saved, me, onSaved }: { saved: WelcomeEmail; me: str
     setTesting(true)
     setTestMsg(null)
     try {
-      await api.testEmail(w)
-      setTestMsg({ ok: true, text: `Sent a test to ${me}. It uses the form as it is now, saved or not.` })
+      const realLinks = await api.testEmail(w)
+      setTestMsg({ ok: true, text: `Sent a test to ${me}. It uses the form as it is now, saved or not. ${realLinks
+        ? 'The invite and unsubscribe links are your own waitlist links.'
+        : 'Your address isn’t on the waitlist, so its links are samples; join with it to test real links.'}` })
     } catch (e) {
       const m = errorMessage(e)
       setTestMsg({ ok: false, text: /not configured/i.test(m) ? `${m} Ask whoever runs the server to set them; until then no email can be sent.` : m })
