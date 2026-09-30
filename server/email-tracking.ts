@@ -122,7 +122,7 @@ export function createClickHandler(deps: TrackingDeps) {
       'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
       'X-Robots-Tag': 'noindex', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
     })
-    response.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${mailto}"><title>Share your invite · Open Swarm</title>
+    response.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${mailto}"><title>Share your invite · OpenSwarm</title>
 <style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f5f3;color:#292b27}main{max-width:440px;margin:14vh auto;padding:32px;background:#fff;border:1px solid #e6e7e3;border-radius:12px}a.button{display:inline-block;background:#292b27;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none}p{color:#62645e;line-height:1.6}code{word-break:break-all}</style></head>
 <body><main><h1 style="font-weight:400">Share your invite</h1><p>Your email app should open with a message ready to send. If it doesn’t, use the button or copy your link.</p>
 <p><a class="button" href="${mailto}">Open email draft</a></p><p>Your invite link:<br><code>${escapeHtml(invite.href)}</code></p></main></body></html>`)

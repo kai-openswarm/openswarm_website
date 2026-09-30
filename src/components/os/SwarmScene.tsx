@@ -331,7 +331,7 @@ export function SwarmScene() {
   const cursorO = ep(t, 0.45, 0.75) * (1 - ep(t, MORPH_A + 0.05, MORPH_A + 0.35))
 
   return (
-    <Stage w={W} h={H} stageRef={ref} label="Open Swarm's Problem Validator sends one agent each to Reddit, X, Hacker News, Product Hunt and LinkedIn, then gathers 38 people who have the problem.">
+    <Stage w={W} h={H} stageRef={ref} label="OpenSwarm's Problem Validator sends one agent each to Reddit, X, Hacker News, Product Hunt and LinkedIn, then gathers 38 people who have the problem.">
       <Desktop wallpaper>
         {/* the swarm: lines, finds in flight, agent chips and the running total */}
         {graphO > 0.005 && t > LINE_A && (

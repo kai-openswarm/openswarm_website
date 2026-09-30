@@ -12,7 +12,7 @@ import { emailEvents, renderWaitlistPayload } from './waitlist-mailer.ts'
 const CODE = 'k'.repeat(32)
 const SECRET = 's'.repeat(40)
 const links = { publicUrl: 'https://openswarmwebsite.vercel.app', secret: SECRET }
-const sender = { ...DEFAULT_SIGNUP_CONFIG.welcome_email, from_name: 'Open Swarm', from_email: 'noreply@openswarm.com', postal_address: '1 Main St' }
+const sender = { ...DEFAULT_SIGNUP_CONFIG.welcome_email, from_name: 'OpenSwarm', from_email: 'noreply@openswarm.com', postal_address: '1 Main St' }
 const config: SignupConfig = { ...DEFAULT_SIGNUP_CONFIG, welcome_email: sender }
 
 async function serve(t: TestContext, handler: (request: IncomingMessage, response: ServerResponse) => Promise<void>) {
@@ -41,7 +41,7 @@ function deps(onWaitlist: boolean) {
 
 test('the branded template takes its sender, subjects and postal address from the dashboard', () => {
   const welcome = renderWaitlistPayload('welcome', CODE, 'person@example.com', config, links)
-  assert.equal(welcome.from, 'Open Swarm <noreply@openswarm.com>')
+  assert.equal(welcome.from, 'OpenSwarm <noreply@openswarm.com>')
   assert.equal(welcome.subject, sender.subject)
   assert.ok(welcome.html.includes(`https://openswarmwebsite.vercel.app/?ref=${CODE}`))
   assert.ok(welcome.html.includes('1 Main St'))
@@ -98,7 +98,7 @@ test('preview renders without sending and send-pending drains the queue with an 
   const { deps: d, logged } = deps(false)
   const preview = await serve(t, createEmailPreviewHandler(d, () => links))
   const body = await (await preview({ kind: 'welcome', welcome_email: sender })).json() as Record<string, string>
-  assert.equal(body.from, 'Open Swarm <noreply@openswarm.com>')
+  assert.equal(body.from, 'OpenSwarm <noreply@openswarm.com>')
   assert.ok(body.html.includes('You’re on the list.'))
   const { mailer: m } = mailer()
   const pending = await serve(t, createSendPendingHandler(d, m))

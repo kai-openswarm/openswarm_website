@@ -1,12 +1,12 @@
-# Open Swarm website
+# OpenSwarm website
 
-The marketing website for [Open Swarm](https://openswarm.com), a free AI desktop for Mac. Built with React, TypeScript, and Vite, it combines animated product demonstrations with an email waitlist and referral flow.
+The marketing website for [OpenSwarm](https://openswarm.com), a free AI desktop for Mac. Built with React, TypeScript, and Vite, it combines animated product demonstrations with an email waitlist and referral flow.
 
 <table>
   <tr><th>Desktop demo</th><th>Mobile demo</th></tr>
   <tr>
     <td width="68%"><img src="docs/preview-demo-desktop-2026-09-30.jpg" alt="Desktop demo with a slimmer translucent sidebar, lighter wallpaper, blue-gray glass panels, and authentic application icons, including ChatGPT and Claude in the sidebar" /></td>
-    <td width="32%"><img src="docs/preview-demo-mobile-2026-09-30.jpg" alt="Mobile demo showing the blue-gray glass app launcher over lighter wallpaper, with authentic Apple and Open Swarm artwork" /></td>
+    <td width="32%"><img src="docs/preview-demo-mobile-2026-09-30.jpg" alt="Mobile demo showing the blue-gray glass app launcher over lighter wallpaper, with authentic Apple and OpenSwarm artwork" /></td>
   </tr>
 </table>
 
@@ -201,7 +201,7 @@ To add a scene, reuse `Stage`, `useTimeline`, and the timing helpers from `kit.t
 ### Design and copy conventions
 
 - Keep interface controls primarily black and white, with color in imagery and backgrounds. Preserve the established blue section labels and EF purple badge.
-- Reserve first-party orange for the Open Swarm octopus and EF wordmark. Third-party logos retain their original colors.
+- Reserve first-party orange for the OpenSwarm octopus and EF wordmark. Third-party logos retain their original colors.
 - Use real third-party logos from [brands.ts](src/lib/brands.ts). Demo applications use original artwork from [app-assets.ts](src/lib/app-assets.ts); reserve line icons for utility controls. Daily Brief has its own illustration because it is created within the demo.
 - Write plain sentences without em dashes in site copy.
 - Give each animation a descriptive `Stage` or `PanelRoot` label and preserve reduced-motion behavior.

@@ -7,7 +7,7 @@ import { DOMAIN_RE, MAX_BLOCKED_DOMAINS, SETTING_EMAIL_RE, normalizeDomain } fro
 import { Button, ErrorState, Skeleton, Switch, Tabs, inputClass } from '../ui'
 
 const DEFAULT_WELCOME: WelcomeEmail = {
-  enabled: false, from_name: 'Open Swarm', from_email: '', reply_to: '', subject: '', body: '', postal_address: '',
+  enabled: false, from_name: 'OpenSwarm', from_email: '', reply_to: '', subject: '', body: '', postal_address: '',
 }
 
 type Msg = { ok: boolean; text: string } | null

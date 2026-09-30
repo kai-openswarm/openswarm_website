@@ -39,11 +39,11 @@ export const DEFAULT_SIGNUP_CONFIG: SignupConfig = {
   signup_limit_per_day: 40,
   welcome_email: {
     enabled: false,
-    from_name: 'Open Swarm',
+    from_name: 'OpenSwarm',
     from_email: '',
     reply_to: '',
-    subject: 'You’re on the Open Swarm waitlist',
-    body: 'Thanks for joining the Open Swarm waitlist.\n\n{{invite_link}}',
+    subject: 'You’re on the OpenSwarm waitlist',
+    body: 'Thanks for joining the OpenSwarm waitlist.\n\n{{invite_link}}',
     postal_address: '',
   },
   priority_email: {

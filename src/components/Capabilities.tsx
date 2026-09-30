@@ -8,7 +8,7 @@ import { B, type Brand } from '@/lib/brands'
 import { cn, media } from '@/lib/utils'
 
 /*
-  Aside's "Anything you do in a browser" section, rebuilt for Open Swarm: a tilted wall of
+  Aside's "Anything you do in a browser" section, rebuilt for OpenSwarm: a tilted wall of
   the apps agents already work in, then three pastel cards, each with the ask and a real
   recording of the swarm doing it. Each product has its own painted wallpaper; the
   windows are frosted so the colour shows through without competing with the interface.
@@ -127,7 +127,7 @@ function CapCard({ c, i }: { c: Card; i: number }) {
           <Ask text={c.ask} />
         </div>
         <div className="relative -mb-3 mt-5 px-4 sm:px-5">
-          <Window size="sm" title="Open Swarm">
+          <Window size="sm" title="OpenSwarm">
             <c.Scene />
           </Window>
         </div>

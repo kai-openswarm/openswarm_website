@@ -23,7 +23,7 @@ function fixture(steps: Step[]) {
 }
 const id = '11111111-1111-4111-8111-111111111111'
 const code = 'a'.repeat(32)
-const payload: EmailPayload = { from: 'Open Swarm <hello@example.com>', to: ['friend@example.com'], subject: 'You’re on the list', html: '<p>You’re in.</p>', text: 'You’re in.' }
+const payload: EmailPayload = { from: 'OpenSwarm <hello@example.com>', to: ['friend@example.com'], subject: 'You’re on the list', html: '<p>You’re in.</p>', text: 'You’re in.' }
 const serialized = JSON.stringify(payload)
 const hash = createHash('sha256').update(serialized).digest('hex')
 const job = { id, kind: 'welcome', referral_code: code, email: payload.to[0], created_at: '2026-09-30T12:00:00Z', payload: null, payload_hash: null, attempt_count: 0 }

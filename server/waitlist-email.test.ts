@@ -12,10 +12,10 @@ const options = {
 test('welcome HTML and plain text preserve the personal invite and real next step', () => {
   const email = renderWaitlistEmail(options)
   const link = `https://example.com/launch/?ref=${options.referralCode}`
-  assert.match(email.subject, /Open Swarm waitlist/)
+  assert.match(email.subject, /OpenSwarm waitlist/)
   assert.ok(email.html.includes(link))
   assert.ok(email.text.includes(link))
-  assert.match(email.html, /mailto:\?subject=Join%20me%20on%20Open%20Swarm/)
+  assert.match(email.html, /mailto:\?subject=Join%20me%20on%20OpenSwarm/)
   assert.match(email.html, /when early access opens/)
   assert.match(email.text, /When 3 friends join/)
   assert.ok(email.html.includes('src="https://example.com/launch/media/logo-256.png"'))

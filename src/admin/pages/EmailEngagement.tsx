@@ -5,12 +5,12 @@ import type { EmailKind, EmailKindEngagement } from '../types'
 import { DataTable, EmptyState, InfoTip, Panel, QueryView, RankedList, Skeleton, SkeletonRows } from '../ui'
 
 const KIND_LABEL: Record<EmailKind, string> = { welcome: 'Welcome', priority: 'Priority' }
-const LINK_LABEL: Record<string, string> = { share: 'Share your invite', explore: 'Explore Open Swarm', resend_link: 'Link (Resend)' }
+const LINK_LABEL: Record<string, string> = { share: 'Share your invite', explore: 'Explore OpenSwarm', resend_link: 'Link (Resend)' }
 
 const TIPS = {
   sent: 'Emails the mail server accepted, for jobs queued in this range.',
   opened: 'Emails opened at least once, from a 1-pixel image. Approximate: Apple Mail preloads images (counts opens that never happened) and many clients block images (misses real ones). Scanner and bot opens are excluded.',
-  clicked: 'Emails whose main button was clicked: “Share your invite” in the welcome email, “Explore Open Swarm” in the priority email. The plain invite link is deliberately not tracked, so friends’ visits still count as invites (see Referrals). Bot clicks are excluded.',
+  clicked: 'Emails whose main button was clicked: “Share your invite” in the welcome email, “Explore OpenSwarm” in the priority email. The plain invite link is deliberately not tracked, so friends’ visits still count as invites (see Referrals). Bot clicks are excluded.',
   cto: 'Click-to-open: clicked ÷ opened.',
   unsub: 'People who unsubscribed after this email was sent ÷ sent.',
   resend: 'Delivered, bounced and complaints come only from Resend’s webhooks, so they cover only emails the Resend backup sent. SMTP (Google Workspace) does not report them.',

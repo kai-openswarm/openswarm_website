@@ -5,7 +5,7 @@ import { DemoAppIcon } from './DemoAppIcon'
 import './demo-surfaces.css'
 
 /*
-  The Open Swarm desktop, rebuilt as components so the product scenes on the page are
+  The OpenSwarm desktop, rebuilt as components so the product scenes on the page are
   crisp animation instead of screen recordings. Colours, shapes and labels are measured
   from Haik's launch videos, with a wallpaper canvas, translucent glass dock, dark agent cards
   with title pills, a voice pill and an app launcher. Every scene is a pure function

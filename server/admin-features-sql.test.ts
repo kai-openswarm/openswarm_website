@@ -104,7 +104,7 @@ test('email signup settings, filter operators, comparisons, referrals loop, anno
     await update('signup_limit_per_hour', 3)
     await assert.rejects(update('blocked_email_domains', ['Not A Domain']), /lowercase domain/)
     await assert.rejects(update('signup_limit_per_day', 0), /between 1 and 10000/)
-    const welcome = { enabled: true, from_name: 'Open Swarm', from_email: 'hello@openswarm.com', reply_to: '', subject: 'Welcome', body: 'Hi {{invite_link}}', postal_address: '' }
+    const welcome = { enabled: true, from_name: 'OpenSwarm', from_email: 'hello@openswarm.com', reply_to: '', subject: 'Welcome', body: 'Hi {{invite_link}}', postal_address: '' }
     await assert.rejects(update('welcome_email', welcome), /postal address/)
     await update('welcome_email', { ...welcome, postal_address: '1 Main St' })
     const config = parseSignupConfig((await api.query('SELECT analytics.signup_config() AS c')).rows[0].c)
@@ -134,7 +134,7 @@ test('email signup settings, filter operators, comparisons, referrals loop, anno
     assert.equal(queued.added, true)
     const drained = await createEmailOutbox(api).drain({
       limit: 5,
-      render: ({ email, kind }) => ({ from: 'Open Swarm <noreply@example.com>', to: [email], subject: kind, html: '<p>Hi</p>', text: 'Hi' }),
+      render: ({ email, kind }) => ({ from: 'OpenSwarm <noreply@example.com>', to: [email], subject: kind, html: '<p>Hi</p>', text: 'Hi' }),
       send: async (_payload, key) => ({ id: `smtp-${key}` }),
     })
     assert.equal(drained.sent, 2, 'the friend’s and the new signup’s welcome emails')

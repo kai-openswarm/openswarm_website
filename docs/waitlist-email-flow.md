@@ -1,4 +1,4 @@
-# Open Swarm waitlist emails
+# OpenSwarm waitlist emails
 
 The email flow extends the existing email waitlist and preserves its signup response. Sending is **off by default**. No real emails were sent, no live database was migrated, and no provider credentials were configured while building this addition.
 
@@ -18,7 +18,7 @@ The supplied [LaunchList article](https://getlaunchlist.com/blog/waitlist-email-
 
 ### Visual reference lock and artwork
 
-The user-supplied Jev email screenshot anchors the compact, letter-like hierarchy and direct confirmation. Crafting Emails contributes a single primary action and a friendly illustration. Open Swarm contributes the original coral mark and the three-friend reward. The user requested smaller, less cold typography and a sleek design; the refinement removes the oversized celebration panel, slogans, numbered tiles, and dark promotional card. Refero’s live search was unavailable, so its bundled typography guidance and the supplied references informed the build.
+The user-supplied Jev email screenshot anchors the compact, letter-like hierarchy and direct confirmation. Crafting Emails contributes a single primary action and a friendly illustration. OpenSwarm contributes the original coral mark and the three-friend reward. The user requested smaller, less cold typography and a sleek design; the refinement removes the oversized celebration panel, slogans, numbered tiles, and dark promotional card. Refero’s live search was unavailable, so its bundled typography guidance and the supplied references informed the build.
 
 `public/media/email/invitations.jpg` is original synthetic artwork generated with Higgsfield GPT Image 2 on September 30, 2026. Its art direction is three translucent vellum invitations, one coral insert, soft daylight, a pure white background, and no text or logos. The 2688 × 1152 source was resized to 1120 × 480 JPEG (about 53KB), displayed at up to 560 × 240. The paper and artwork remain white in the dark preview, with a dark outer canvas and readable footer. The original logo is reused separately, unchanged. The image is decorative; it does not claim that access invitations have already been issued.
 
@@ -26,7 +26,7 @@ The user-supplied Jev email screenshot anchors the compact, letter-like hierarch
 
 | Trigger | Subject | Content and action |
 | --- | --- | --- |
-| New saved email signup while delivery is enabled | You're on the Open Swarm waitlist | Confirms the saved spot and explains that access will arrive by email. “Share your invite” opens a prepared email draft containing the personal referral URL; the same URL is visible for copying. |
+| New saved email signup while delivery is enabled | You're on the OpenSwarm waitlist | Confirms the saved spot and explains that access will arrive by email. “Share your invite” opens a prepared email draft containing the personal referral URL; the same URL is visible for copying. |
 | Third unique referred signup | You've unlocked priority early access | Confirms the existing three-referral milestone. Explains that the actual invitation will arrive separately. Links back to the product section. |
 | Duplicate signup | No new email | Returns existing referral progress without changing attribution, resending, or undoing an opt-out. |
 | Unsubscribe | No additional confirmation email | Suppresses future waitlist messages while retaining the saved signup and referral history. |
@@ -73,7 +73,7 @@ The `sent` status means a sender accepted the message, not that an inbox receive
 | Measure | How | Coverage |
 | --- | --- | --- |
 | Opens | A 1×1 image at `/api/email/open` with a signed token | Approximate: Apple Mail preloads images and many apps block them |
-| Clicks | The main button goes through `/api/email/click` (signed token, fixed destinations, no open redirect) | Welcome "Share your invite" and priority "Explore Open Swarm". The visible invite link is never wrapped, so friends' visits still count as invites |
+| Clicks | The main button goes through `/api/email/click` (signed token, fixed destinations, no open redirect) | Welcome "Share your invite" and priority "Explore OpenSwarm". The visible invite link is never wrapped, so friends' visits still count as invites |
 | Email channel | The priority email's Explore link carries `utm_source=waitlist-email&utm_medium=email&utm_campaign=priority` | Those visits appear under the Email channel on the Traffic page |
 | Delivered, bounced, delayed, complaints | Resend webhooks at `/api/email/resend-webhook`, verified with `RESEND_WEBHOOK_SECRET` | Only emails the Resend backup sent |
 | Unsubscribes | Signed unsubscribe link | All emails |

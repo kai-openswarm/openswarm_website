@@ -58,7 +58,7 @@ export function referralLink(code: string, publicSiteUrl = import.meta.env.VITE_
     const host = configured.hostname.toLowerCase().replace(/\.$/, '')
     const localHost = host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || host === '0.0.0.0' || /^127\./.test(host)
     if (['https:', 'http:'].includes(configured.protocol) && !localHost && !configured.username && !configured.password) origin = configured.origin
-  } catch { /* Invalid overrides use the public Open Swarm origin. */ }
+  } catch { /* Invalid overrides use the public OpenSwarm origin. */ }
   const url = new URL(origin)
   try {
     // Keep the configured deployment path, never a preview origin or tracking query.

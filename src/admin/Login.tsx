@@ -15,7 +15,7 @@ export function Brand() {
   return (
     <div className="mb-5 flex items-center gap-2">
       <img src="../favicon.png" alt="" className="size-6 rounded" />
-      <span className="text-[14px] font-semibold">Open Swarm Admin</span>
+      <span className="text-[14px] font-semibold">OpenSwarm Admin</span>
     </div>
   )
 }
