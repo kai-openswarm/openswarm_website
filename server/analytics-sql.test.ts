@@ -4,7 +4,7 @@ import type { Pool } from 'pg'
 import type { IngestBatch, SessionMeta } from './analytics.ts'
 import { createPostgresAnalyticsStore } from './postgres-analytics.ts'
 import { createPostgresWaitlistStore } from './postgres-waitlist.ts'
-import { applyMigrations, withTestDatabase } from './test-database.ts'
+import { applyMigrations, connectAsApiRole, withTestDatabase } from './test-database.ts'
 
 const skip = !process.env.TEST_DATABASE_URL && 'Set TEST_DATABASE_URL to a PostgreSQL server where the test may create databases.'
 
@@ -53,8 +53,10 @@ const S3 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 test('ingest, signup attribution and the admin API on a real database', { skip }, async () => {
   await withTestDatabase(async (database) => {
     await applyMigrations(database)
-    const analytics = createPostgresAnalyticsStore(database)
-    const waitlist = createPostgresWaitlistStore(database)
+    // The stores run as the hosted API does: the least-privilege openswarm_api role.
+    const api = await connectAsApiRole(database)
+    const analytics = createPostgresAnalyticsStore(api)
+    const waitlist = createPostgresWaitlistStore(api)
 
     // Visitor 1 arrives from X, reads, scrolls, submits, and signs up.
     await analytics.ingest(batch(V1, S1, [['pageview'], ['section_view', { section: 'top' }], ['waitlist_view', { placement: 'hero' }]],
@@ -173,6 +175,12 @@ test('ingest, signup attribution and the admin API on a real database', { skip }
       (SELECT count(*) FROM analytics.events WHERE visitor_id = $1)::int AS events,
       (SELECT referred_by FROM waitlist_signups) AS referred_by`, [V1])
     assert.deepEqual(remaining.rows[0], { signups: 1, attribution: 1, sessions: 0, events: 0, referred_by: null })
+
+    // The website role cannot read analytics tables or change signups directly.
+    await assert.rejects(api.query('SELECT count(*) FROM analytics.sessions'), /permission denied/)
+    await assert.rejects(api.query('DELETE FROM waitlist_signups'), /permission denied/)
+    await assert.rejects(api.query("SELECT analytics.add_admin('intruder@example.com', 'intruder@example.com')"), /Admin access required/)
+    await api.end()
 
     await database.query('SELECT analytics.prune()')
   })

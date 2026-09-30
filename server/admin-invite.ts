@@ -33,8 +33,8 @@ export function createAdminInviteHandler(deps: AdminInviteDeps) {
       if (!userResponse.ok) throw new RequestError(401, 'Sign in again.')
       const caller = ((await userResponse.json()) as { email?: string }).email?.toLowerCase()
       if (!caller) throw new RequestError(401, 'Sign in again.')
-      const isAdmin = await deps.database.query('SELECT 1 FROM analytics.admin_users WHERE email = $1', [caller])
-      if (isAdmin.rowCount === 0) throw new RequestError(403, 'Admin access required.')
+      const isAdmin = await deps.database.query<{ allowed: boolean }>('SELECT analytics.is_admin_email($1) AS allowed', [caller])
+      if (!isAdmin.rows[0]?.allowed) throw new RequestError(403, 'Admin access required.')
 
       let input: unknown
       try { input = JSON.parse(await readBody(request, 1_024)) } catch { throw new RequestError(400, 'Send JSON.') }
@@ -50,11 +50,7 @@ export function createAdminInviteHandler(deps: AdminInviteDeps) {
       // 422 means the login already exists, which is fine.
       if (!created.ok && created.status !== 422) throw new Error(`Supabase admin API returned ${created.status}`)
 
-      await deps.database.query(
-        'INSERT INTO analytics.admin_users (email, added_by) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING',
-        [email, caller],
-      )
-      await deps.database.query('SELECT analytics.audit($1, $2, $3::jsonb)', [caller, 'add_admin', JSON.stringify({ email })])
+      await deps.database.query('SELECT analytics.add_admin($1, $2)', [caller, email])
       respond(response, 200, { ok: true })
     } catch (error) {
       if (error instanceof RequestError) respond(response, error.status, { ok: false, error: error.message })

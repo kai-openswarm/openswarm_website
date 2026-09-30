@@ -4,6 +4,7 @@ import { createCollectHandler, parseUserAgent, type AnalyticsStore } from './ana
 import { RequestError, clientIp, hashValue, hashingSecret, header, originAllowed, requestGeo } from './http.ts'
 import { createPostgresAnalyticsStore } from './postgres-analytics.ts'
 import { createPostgresWaitlistStore } from './postgres-waitlist.ts'
+import { SUPABASE_ROOT_CA } from './supabase-ca.ts'
 import { createWaitlistMiddleware, type WaitlistOptions, type WaitlistStore } from './waitlist.ts'
 
 const unavailable: WaitlistStore = {
@@ -32,6 +33,21 @@ export function createProductionWaitlistHandler(store: WaitlistStore, options: W
 
 let pool: Pool | undefined
 
+/**
+ * Supabase certificates chain to Supabase's own root, which Node does not trust by default.
+ * Verify against that root rather than disabling verification. Other hosts use the
+ * connection string's own sslmode.
+ */
+export function databaseTls(connectionString: string): { ssl?: { ca: string, rejectUnauthorized: true } } {
+  try {
+    const { hostname, searchParams } = new URL(connectionString)
+    if (!/\.supabase\.(com|co)$/.test(hostname) || searchParams.has('sslmode')) return {}
+    return { ssl: { ca: SUPABASE_ROOT_CA, rejectUnauthorized: true } }
+  } catch {
+    return {}
+  }
+}
+
 /** One small pool per function instance. Use the Supabase pooler URL (port 6543) in DATABASE_URL. */
 export function productionPool(): Pool | null {
   if (pool) return pool
@@ -39,6 +55,7 @@ export function productionPool(): Pool | null {
   if (!connectionString) return null
   pool = new Pool({
     connectionString,
+    ...databaseTls(connectionString),
     max: 3,
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 10_000,

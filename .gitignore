@@ -34,3 +34,6 @@ research/
 
 # Local waitlist signups contain phone numbers. Never commit them.
 .data/
+
+# Vercel project link
+.vercel
