@@ -8,7 +8,7 @@ import { Reveal } from './ui/Reveal'
 
 export function Intro() {
   return (
-    <section className="relative">
+    <section data-section="intro" className="relative">
       <div className="mx-auto grid gap-6 px-5 pb-20 pt-12 sm:px-8 sm:pb-28 sm:pt-16 lg:w-[calc(100%-64px)] lg:max-w-[1240px] lg:grid-cols-[1fr_1.6fr] lg:gap-10">
         <Reveal>
           <p className="-my-2 inline-flex items-center py-2 text-[16px] font-medium text-sky sm:text-[17px]">

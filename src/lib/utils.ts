@@ -7,20 +7,23 @@ export function cn(...inputs: ClassValue[]) {
 
 export const EASE = [0.22, 1, 0.36, 1] as const
 
-/** Publish legal links only after the approved HTTPS pages have been configured. */
-function legalPage(value: string | undefined) {
-  if (!value) return ''
+/** An HTTPS override for a legal page; otherwise the page built with this site. */
+function legalPage(value: string | undefined, fallback: string) {
+  if (!value) return fallback
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' ? url.href : ''
-  } catch { return '' }
+    return url.protocol === 'https:' ? url.href : fallback
+  } catch { return fallback }
 }
 
 export const LINKS = {
   discord: 'https://discord.gg/NRzxNZW5hH',
   x: 'https://x.com/openswarm',
-  privacy: legalPage(import.meta.env.VITE_PRIVACY_URL),
-  terms: legalPage(import.meta.env.VITE_TERMS_URL),
+  privacy: legalPage(import.meta.env.VITE_PRIVACY_URL, `${import.meta.env.BASE_URL}privacy/`),
+  terms: legalPage(import.meta.env.VITE_TERMS_URL, `${import.meta.env.BASE_URL}terms/`),
+  privacyChoices: `${import.meta.env.BASE_URL}privacy/#your-choices`,
 }
 
-export const media = (name: string) => `${import.meta.env.BASE_URL}media/${name}`
+/** Site images. Set VITE_MEDIA_BASE_URL (for example an R2 bucket's public URL) to serve them from elsewhere. */
+const MEDIA_BASE = import.meta.env.VITE_MEDIA_BASE_URL?.trim().replace(/\/?$/, '/') || `${import.meta.env.BASE_URL}media/`
+export const media = (name: string) => `${MEDIA_BASE}${name}`

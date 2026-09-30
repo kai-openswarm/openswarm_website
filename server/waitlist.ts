@@ -1,9 +1,11 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IncomingMessage } from 'node:http'
 import path from 'node:path'
 import type { Connect, Plugin } from 'vite'
 import { normalizePhone } from '../src/lib/phone.ts'
+import { RequestError, readBody, respond } from './http.ts'
+import { createLocalCollectMiddleware } from './analytics.ts'
 
 type WaitlistEntry = {
   phone: string
@@ -11,6 +13,7 @@ type WaitlistEntry = {
   createdAt: string
   referralCode?: string
   referredBy?: string
+  consentVersion?: string
 }
 
 export type ReferralStatus = {
@@ -20,13 +23,37 @@ export type ReferralStatus = {
   priorityAccess: boolean
 }
 
+/** Optional details recorded with a new signup. None of it changes signup behavior. */
+export type SignupContext = {
+  visitorId?: string
+  sessionId?: string
+  consentVersion?: string
+  networkHash?: string
+  fallback?: Record<string, string | null>
+}
+
 export type WaitlistStore = {
-  add(phone: string, source: string, referralCode?: string): Promise<{ added: boolean, referral: ReferralStatus }>
+  add(phone: string, source: string, referralCode?: string, context?: SignupContext): Promise<{ added: boolean, referral: ReferralStatus }>
   referral(code: string): Promise<ReferralStatus | null>
+  /** The public waitlist size, including any configured baseline. */
+  displayCount?(): Promise<number>
+}
+
+export type WaitlistOptions = {
+  /** Runs before storage is touched; throws a RequestError to reject (origin, rate limit). */
+  guard?(request: IncomingMessage, action: 'signup' | 'referral' | 'stats'): Promise<void>
+  /** Verifies a bot-challenge token when one is configured. */
+  verifyHuman?(token: string | undefined, request: IncomingMessage): Promise<boolean>
+  /** Server-derived signup details such as the hashed network and approximate location. */
+  context?(request: IncomingMessage): SignupContext
 }
 
 const MAX_BODY_BYTES = 4_096
 const REFERRAL_CODE = /^[A-Za-z0-9_-]{32}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const CONSENT_VERSION = /^[a-z0-9-]{1,32}$/
+/** The hero previously showed this supplied figure; hosted builds read it from settings. */
+export const DEFAULT_COUNT_BASELINE = 6327
 
 function isReferralCode(value: unknown): value is string {
   return typeof value === 'string' && REFERRAL_CODE.test(value)
@@ -124,13 +151,14 @@ export function createWaitlistStore(filePath: string) {
   }
 
   return {
-    add(phone: string, source: string, referralCode?: string) {
+    add(phone: string, source: string, referralCode?: string, context?: SignupContext) {
       return queued(async () => {
         const entries = await readEntries()
         let entry = entries.find((candidate) => candidate.phone === phone)
         const added = !entry
         if (!entry) {
           entry = { phone, source, createdAt: new Date().toISOString() }
+          if (context?.consentVersion) entry.consentVersion = context.consentVersion
           // Attribute only a first signup. Re-submission cannot change an inviter or credit a second signup.
           if (referralCode && entries.some((candidate) => candidate.referralCode === referralCode)) {
             entry.referredBy = referralCode
@@ -157,64 +185,13 @@ export function createWaitlistStore(filePath: string) {
         return referralStatus(entries, code)
       })
     },
+    displayCount() {
+      return queued(async () => DEFAULT_COUNT_BASELINE + (await readEntries()).length)
+    },
   }
 }
 
-class RequestError extends Error {
-  status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.status = status
-  }
-}
-
-function readBody(request: IncomingMessage): Promise<string> {
-  // Vercel's Node runtime may have already parsed/consumed the request stream.
-  // Normalize that body through the same JSON validation and size limit as local requests.
-  if ('body' in request && request.body !== undefined) {
-    const body = Buffer.isBuffer(request.body)
-      ? request.body.toString('utf8')
-      : typeof request.body === 'string' ? request.body : JSON.stringify(request.body)
-    if (Buffer.byteLength(body ?? '', 'utf8') > MAX_BODY_BYTES) {
-      return Promise.reject(new RequestError(413, 'This request is too large.'))
-    }
-    return Promise.resolve(body ?? '')
-  }
-  if (request.readableEnded) return Promise.resolve('')
-  return new Promise((resolve, reject) => {
-    let size = 0
-    const chunks: Buffer[] = []
-    let tooLarge = false
-    request.on('data', (chunk: Buffer) => {
-      size += chunk.length
-      if (size > MAX_BODY_BYTES) {
-        if (!tooLarge) reject(new RequestError(413, 'This request is too large.'))
-        tooLarge = true
-        chunks.length = 0
-      } else if (!tooLarge) {
-        chunks.push(chunk)
-      }
-    })
-    request.on('end', () => {
-      if (!tooLarge) resolve(Buffer.concat(chunks).toString('utf8'))
-    })
-    request.on('error', reject)
-    request.on('aborted', () => reject(new RequestError(400, 'The request was interrupted.')))
-  })
-}
-
-function respond(response: ServerResponse, status: number, body: object) {
-  if (response.destroyed || response.writableEnded) return
-  response.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-  })
-  response.end(JSON.stringify(body))
-}
-
-export function createWaitlistMiddleware(storage: string | WaitlistStore): Connect.NextHandleFunction {
+export function createWaitlistMiddleware(storage: string | WaitlistStore, options: WaitlistOptions = {}): Connect.NextHandleFunction {
   const store = typeof storage === 'string' ? createWaitlistStore(storage) : storage
 
   return (request, response, next) => {
@@ -230,16 +207,26 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore): Conne
     }
     const rawPath = request.url?.split('?')[0]
     const isReferralRequest = rawPath === '/api/waitlist/referral'
-    if (rawPath !== '/api/waitlist' && !isReferralRequest) return next()
-    const allowedMethod = isReferralRequest ? 'GET' : 'POST'
+    const isStatsRequest = rawPath === '/api/stats'
+    if (rawPath !== '/api/waitlist' && !isReferralRequest && !isStatsRequest) return next()
+    const allowedMethod = isReferralRequest || isStatsRequest ? 'GET' : 'POST'
     if (request.method !== allowedMethod) {
       response.setHeader('Allow', allowedMethod)
-      respond(response, 405, { ok: false, error: isReferralRequest ? 'Use GET to check your referrals.' : 'Use POST to join the waitlist.' })
+      respond(response, 405, { ok: false, error: allowedMethod === 'GET' ? 'Use GET for this request.' : 'Use POST to join the waitlist.' })
       return
     }
 
     async function handle() {
+      if (isStatsRequest) {
+        await options.guard?.(request, 'stats')
+        if (!store.displayCount) throw new RequestError(404, 'Not found.')
+        const count = await store.displayCount()
+        // Shared caches may serve this briefly; it changes with each signup, not per visitor.
+        respond(response, 200, { ok: true, count }, { 'Cache-Control': 'public, max-age=0, s-maxage=300, stale-while-revalidate=600' })
+        return
+      }
       if (isReferralRequest) {
+        await options.guard?.(request, 'referral')
         const code = new URL(request.url ?? '', 'http://localhost').searchParams.get('code')
         if (!isReferralCode(code)) throw new RequestError(404, 'This invite link was not found.')
         const referral = await store.referral(code)
@@ -253,7 +240,7 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore): Conne
       }
 
       let input: unknown
-      const body = await readBody(request)
+      const body = await readBody(request, MAX_BODY_BYTES)
       try {
         input = JSON.parse(body)
       } catch {
@@ -262,7 +249,7 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore): Conne
       if (!input || typeof input !== 'object' || Array.isArray(input)) {
         throw new RequestError(400, 'Enter a valid US number, or use + and your country code.')
       }
-      const { phone: rawPhone, source: rawSource = 'website', referralCode } = input as Record<string, unknown>
+      const { phone: rawPhone, source: rawSource = 'website', referralCode, visitorId, sessionId, consentVersion, turnstileToken } = input as Record<string, unknown>
       const phone = typeof rawPhone === 'string' ? normalizePhone(rawPhone) : null
       if (!phone) {
         throw new RequestError(400, 'Enter a valid US number, or use + and your country code.')
@@ -273,8 +260,19 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore): Conne
       if (referralCode !== undefined && !isReferralCode(referralCode)) {
         throw new RequestError(400, 'The invite code is invalid. Please refresh and try again.')
       }
+      await options.guard?.(request, 'signup')
+      if (options.verifyHuman && !await options.verifyHuman(typeof turnstileToken === 'string' ? turnstileToken : undefined, request)) {
+        throw new RequestError(403, 'We couldn’t verify this request. Please refresh and try again.')
+      }
 
-      const { added, referral } = await store.add(phone, rawSource.trim(), referralCode)
+      // Analytics identifiers are optional and never block a signup when missing or malformed.
+      const context: SignupContext = {
+        ...options.context?.(request),
+        ...(typeof visitorId === 'string' && UUID.test(visitorId) ? { visitorId: visitorId.toLowerCase() } : {}),
+        ...(typeof sessionId === 'string' && UUID.test(sessionId) ? { sessionId: sessionId.toLowerCase() } : {}),
+        ...(typeof consentVersion === 'string' && CONSENT_VERSION.test(consentVersion) ? { consentVersion } : {}),
+      }
+      const { added, referral } = await store.add(phone, rawSource.trim(), referralCode, context)
       respond(response, added ? 201 : 200, { ok: true, referral })
     }
 
@@ -292,6 +290,7 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore): Conne
 /** Local development and local preview only. Static hosting needs a hosted API. */
 export function localWaitlistPlugin(): Plugin {
   let middleware: Connect.NextHandleFunction
+  let collect: Connect.NextHandleFunction
   return {
     name: 'local-phone-waitlist',
     config(config) {
@@ -309,11 +308,14 @@ export function localWaitlistPlugin(): Plugin {
     },
     configResolved(config) {
       middleware = createWaitlistMiddleware(path.join(config.root, '.data', 'waitlist.json'))
+      collect = createLocalCollectMiddleware(path.join(config.root, '.data', 'analytics.ndjson'))
     },
     configureServer(server) {
+      server.middlewares.use(collect)
       server.middlewares.use(middleware)
     },
     configurePreviewServer(server) {
+      server.middlewares.use(collect)
       server.middlewares.use(middleware)
     },
   }

@@ -25,7 +25,10 @@ Captured from the current website on September 30, 2026, at desktop (1440px) and
 - React-based product animations with reduced-motion support, off-screen pausing, and a development scene viewer.
 - Phone signup with country selection, international number validation, and duplicate detection.
 - Personal invite links and referral progress. Three unique referred signups earn priority waitlist eligibility.
-- Local JSON storage for development, plus Node API handlers and a PostgreSQL migration for hosted signups.
+- Local JSON storage for development, plus Node API handlers and PostgreSQL (Supabase) migrations for hosted signups.
+- First-party analytics (traffic sources, campaigns, audience, section reach, scroll depth, signup funnel, referrals, Web Vitals, errors) and a private admin dashboard at `/admin/`. See [analytics](docs/analytics.md).
+- Texting-consent wording on the signup form, a recorded consent version per signup, Privacy and Terms pages, and an advertising opt-out that also honors Global Privacy Control.
+- Signup protection: origin checks, per-network rate limits, and optional Cloudflare Turnstile.
 
 The product scenes are visual demonstrations. Marketplace actions lead to the waitlist. Priority eligibility is recorded by the backend; SMS delivery, phone ownership verification, and product account activation are not implemented.
 
@@ -50,7 +53,7 @@ Local signup works without environment variables or a database. Its first succes
 | `npm run build` | Type-check the app and server implementation, then build the frontend into `dist/` |
 | `npm run preview` | Serve the built frontend with the local waitlist API at `http://localhost:4173` by default |
 | `npm run lint` | Run oxlint |
-| `node --experimental-strip-types --test server/*.test.ts` | Run the waitlist, phone validation, and hosted handler tests |
+| `node --experimental-strip-types --test server/*.test.ts` | Run the waitlist, phone validation, analytics, and hosted handler tests |
 
 Run `npm run build` before `npm run preview`. The preview command is for local verification; hosted signups need the API and database described below.
 
@@ -65,10 +68,16 @@ cp .env.example .env.local
 | Variable | Used by | Purpose |
 | --- | --- | --- |
 | `VITE_PUBLIC_SITE_URL` | Frontend | Public origin for invite links. Defaults to `https://openswarm.com`; localhost overrides are rejected |
-| `VITE_PRIVACY_URL` | Frontend | Approved HTTPS privacy page; the link stays hidden when unset or invalid |
-| `VITE_TERMS_URL` | Frontend | Approved HTTPS terms page; the link stays hidden when unset or invalid |
-| `DATABASE_URL` | Hosted API | Server-only PostgreSQL connection string, including the provider's TLS settings |
-| `TEST_DATABASE_URL` | Test runner | Optional isolated PostgreSQL database for the live integration test |
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Admin dashboard | Supabase project URL and public anon key for admin sign-in |
+| `VITE_TURNSTILE_SITE_KEY` | Frontend | Optional Cloudflare Turnstile site key for the signup bot check |
+| `VITE_X_SIGNUP_EVENT_ID` | Frontend | Optional X Ads conversion event id reported on each new signup |
+| `VITE_PRIVACY_URL`, `VITE_TERMS_URL` | Frontend | Optional HTTPS overrides for the built-in `/privacy/` and `/terms/` pages |
+| `DATABASE_URL` | Hosted API | Server-only Postgres connection string. For Supabase, use the transaction pooler (port 6543) |
+| `ANALYTICS_SALT` | Hosted API | Server-only secret for hashing client IPs used in rate limits; IPs are never stored |
+| `SUPABASE_SERVICE_ROLE_KEY` | Hosted API | Server-only key used by `/api/admin/invite` to create admin logins |
+| `TURNSTILE_SECRET_KEY` | Hosted API | Optional; when set, signups require a valid Turnstile token |
+| `ALLOWED_ORIGINS` | Hosted API | Optional comma-separated extra origins allowed to POST to the API |
+| `TEST_DATABASE_URL` | Test runner | Optional PostgreSQL server where the live integration tests may create and drop databases |
 
 `VITE_` variables are public and embedded at build time. Restart development after changing them, or rebuild for deployment. Keep database credentials in server-only variables. Setting `DATABASE_URL` does not switch the local Vite waitlist to PostgreSQL.
 
@@ -78,8 +87,11 @@ For end-to-end local referral checks, open `http://localhost:4310/?ref=<code>` u
 
 | Endpoint | Request | Behavior |
 | --- | --- | --- |
-| `POST /api/waitlist` | JSON with `phone`, optional `source`, and optional `referralCode` | Save a new signup or return the existing signup's referral progress |
+| `POST /api/waitlist` | JSON with `phone`, optional `source`, `referralCode`, `consentVersion`, `visitorId`, `sessionId`, `turnstileToken` | Save a new signup or return the existing signup's referral progress |
 | `GET /api/waitlist/referral?code=<code>` | A valid share code | Return the current referral count, goal, and priority eligibility |
+| `GET /api/stats` | None | Public waitlist count (admin-set baseline plus real signups), CDN-cached for 5 minutes |
+| `POST /api/collect` | Analytics batch from the browser tracker | Store page and interaction events; returns 204 |
+| `POST /api/admin/invite` | JSON `email` with an admin's Supabase bearer token | Add an admin and create their login |
 
 The form normalizes country-selected numbers to E.164 before submission. The API also validates numbers and deduplicates equivalent formats. A new signup returns HTTP 201; an existing signup returns HTTP 200 without changing its original referral attribution. Success responses contain referral metadata, never phone numbers.
 
@@ -95,10 +107,11 @@ Deploy the **repository root**, including `api/`, `server/`, and dependencies. U
 
 The included hosted entry points target Vercel's Node runtime. Before collecting hosted signups:
 
-1. Configure a PostgreSQL database and deliberately apply [sql/001_waitlist.sql](sql/001_waitlist.sql).
-2. Set the hosting project's server-only `DATABASE_URL` and the frontend variables above.
-3. Build and deploy the frontend together with both API routes.
-4. Verify signup, duplicate handling, an invited signup, and referral progress against the deployed endpoints.
+1. In Supabase, deliberately apply [sql/001_waitlist.sql](sql/001_waitlist.sql) and then [sql/002_analytics.sql](sql/002_analytics.sql).
+2. Configure Supabase Auth for the admin dashboard as described in [analytics setup](docs/analytics.md#one-time-setup).
+3. Set the hosting project's server-only variables and the frontend variables above.
+4. Build and deploy the frontend together with all API routes. [vercel.json](vercel.json) holds the routing and security headers.
+5. Verify signup, duplicate handling, an invited signup, referral progress, `/api/stats`, and that a visit appears on the dashboard's Real-time page.
 
 Follow [hosted waitlist setup](docs/production-waitlist.md) for migration commands and database access requirements. Deployment does not automatically migrate the database or import local `.data/` records.
 
@@ -123,9 +136,12 @@ The script checks for `DATABASE_URL`, builds the project, verifies both Node API
 ## Project structure
 
 ```text
-api/                        Hosted signup and referral handlers
-server/                     Local and PostgreSQL stores, middleware, and tests
-sql/001_waitlist.sql         PostgreSQL schema migration
+admin/index.html             Admin dashboard page (served at /admin/)
+api/                        Hosted signup, referral, stats, analytics and admin-invite handlers
+privacy/, terms/            Privacy Policy and Terms pages
+server/                     Stores, analytics ingestion, middleware, and tests
+sql/001_waitlist.sql         Waitlist schema migration
+sql/002_analytics.sql        Analytics, attribution, and admin dashboard functions
 src/
   App.tsx                   Page composition and navigation behavior
   main.tsx                  Entry point and development-only scene viewer
@@ -135,7 +151,9 @@ src/
     os/                     Product scenes and animation primitives
     usecases/               Sales, operations, recruiting, and research panels
     ui/                     Shared UI, waitlist form, and referral dialog
-  lib/                      Phone/referral helpers, links, brands, and tracking
+  admin/                    Admin dashboard application
+  legal/                    Styles and the privacy-choices script for the legal pages
+  lib/                      Phone/referral helpers, links, brands, analytics, and ad tracking
 public/                     Favicon, illustrations, logos, and icon licenses
 scripts/deploy-preview.sh   Complete preview packaging and deployment
 docs/                       Setup guides, design notes, and verification records
@@ -171,7 +189,9 @@ To add a scene, reuse `Stage`, `useTimeline`, and the timing helpers from `kit.t
 
 ### Tracking
 
-[x-pixel.ts](src/lib/x-pixel.ts) configures the X advertising pixel and tracks clicks on `.dmg` links. It is disabled in Vite development and on local hostnames; it runs in hosted production builds, including hosted previews. Pixel and event IDs are defined in that file.
+[analytics.ts](src/lib/analytics.ts) is the first-party tracker behind the admin dashboard. It sends events only to this site's `/api/collect`. [Analytics and admin dashboard](docs/analytics.md) lists every event, the channel rules, and setup steps.
+
+[x-pixel.ts](src/lib/x-pixel.ts) configures the X advertising pixel, tracks clicks on `.dmg` links, and reports new signups when `VITE_X_SIGNUP_EVENT_ID` is set. It is disabled in Vite development, on local hostnames, for browsers sending Global Privacy Control, and after an opt-out on `/privacy/#your-choices`.
 
 ## Verification and launch notes
 
@@ -184,8 +204,8 @@ The repository contains the hosted backend implementation. A GitHub push alone d
 Items to confirm before a public launch:
 
 - Connect the intended hosting project and migrated database, and verify the hosted signup/referral flow.
-- Configure approved Privacy and Terms pages and the intended notification service. SMS delivery and phone ownership verification need separate implementation.
-- Confirm the hero's supplied 6,327-person waitlist count, which is currently hard-coded.
+- Have counsel review the Privacy and Terms pages and the texting-consent wording, and create the `privacy@openswarm.com` mailbox they reference. SMS delivery and phone ownership verification need separate implementation.
+- Confirm the waitlist counter baseline (6,327 by default). The hero shows this baseline plus real signups; change it in the dashboard's Settings.
 - Align Problem Validator's advertised source list with its six-agent demonstration and confirm the three “Coming soon” marketplace items.
 - Review illustrative quotes, restaurants, ratings, companies, candidates, amounts, and fixed dates in the demonstrations.
 

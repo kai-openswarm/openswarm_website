@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import type { Pool, PoolClient } from 'pg'
-import type { ReferralStatus, WaitlistStore } from './waitlist.ts'
+import type { ReferralStatus, SignupContext, WaitlistStore } from './waitlist.ts'
 
 type Database = Pick<Pool, 'connect' | 'query'>
 type CodeRow = { referral_code: string }
@@ -24,21 +24,27 @@ export function createPostgresWaitlistStore(
   database: Database,
   createCode: () => string = () => randomBytes(24).toString('base64url'),
 ): WaitlistStore {
-  async function add(phone: string, source: string, referralCode?: string) {
+  async function add(phone: string, source: string, referralCode?: string, context: SignupContext = {}) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const client: PoolClient = await database.connect()
       let retry = false
       try {
         await client.query('BEGIN ISOLATION LEVEL READ COMMITTED')
         const inserted = await client.query<CodeRow>(`
-          INSERT INTO waitlist_signups (phone, source, referral_code, referred_by)
-          SELECT $1, $2, $3, inviter.referral_code
+          INSERT INTO waitlist_signups (phone, source, referral_code, referred_by, consent_version, consented_at, network_hash)
+          SELECT $1, $2, $3, inviter.referral_code, $5::text, CASE WHEN $5::text IS NULL THEN NULL ELSE now() END, $6
           FROM (SELECT $4::text AS code) AS requested
           LEFT JOIN waitlist_signups AS inviter ON inviter.referral_code = requested.code AND inviter.phone <> $1
           ON CONFLICT (phone) DO NOTHING
           RETURNING referral_code
-        `, [phone, source, createCode(), referralCode ?? null])
+        `, [phone, source, createCode(), referralCode ?? null, context.consentVersion ?? null, context.networkHash ?? null])
         const added = inserted.rows.length === 1
+        if (added) {
+          // Copy the visit that produced this signup; ids are optional and unverified hints.
+          await client.query('SELECT analytics.attribute_signup($1, $2::uuid, $3::uuid, $4::jsonb)', [
+            phone, context.visitorId ?? null, context.sessionId ?? null, JSON.stringify(context.fallback ?? {}),
+          ])
+        }
         // A concurrent insert may have won the unique phone constraint. A separate
         // READ COMMITTED statement sees that committed row without rewriting its inviter.
         const owner = added ? inserted.rows[0] : (await client.query<CodeRow>(
@@ -64,6 +70,10 @@ export function createPostgresWaitlistStore(
 
   return {
     add,
+    async displayCount() {
+      const result = await database.query<{ count: string }>('SELECT analytics.waitlist_display_count()::text AS count')
+      return Number(result.rows[0]?.count ?? 0)
+    },
     async referral(code) {
       const result = await database.query<ProgressRow>(STATUS_QUERY, [code])
       return result.rows[0] ? status(result.rows[0]) : null

@@ -1,0 +1,44 @@
+:root {
+  --bg: #ffffff;
+  --ink: #0a0a0a;
+  --ink-2: #4d4d4d;
+  --line: rgba(0, 0, 0, 0.1);
+  --soft: #f5f5f5;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0b0b0c; --ink: #f2f2f2; --ink-2: #b3b3b3; --line: rgba(255, 255, 255, 0.12); --soft: #17171a; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.65 "Geist", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+header, main, footer { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+header { display: flex; align-items: center; justify-content: space-between; padding-top: 24px; }
+header a { color: var(--ink); text-decoration: none; font-weight: 600; letter-spacing: -0.02em; display: inline-flex; gap: 8px; align-items: center; }
+header img { width: 24px; height: 24px; image-rendering: pixelated; }
+main { padding-top: 40px; padding-bottom: 56px; }
+h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.03em; font-weight: 500; margin: 0 0 8px; }
+h2 { font-size: 20px; letter-spacing: -0.015em; font-weight: 600; margin: 40px 0 8px; scroll-margin-top: 24px; }
+h3 { font-size: 16px; font-weight: 600; margin: 24px 0 4px; }
+p, li { color: var(--ink-2); }
+strong { color: var(--ink); font-weight: 600; }
+a { color: var(--ink); text-underline-offset: 3px; }
+ul { padding-left: 20px; }
+li + li { margin-top: 4px; }
+.meta { font-size: 14px; color: var(--ink-2); margin: 0; }
+.panel { border: 1px solid var(--line); background: var(--soft); border-radius: 12px; padding: 18px 20px; margin: 16px 0; }
+.panel p { margin: 0 0 12px; }
+button {
+  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 999px; border: 1px solid var(--ink);
+  background: var(--ink); color: var(--bg); padding: 8px 16px; min-height: 40px;
+}
+button.secondary { background: transparent; color: var(--ink); }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+[role="status"] { font-size: 14px; margin-top: 10px; min-height: 1.4em; }
+footer { border-top: 1px solid var(--line); padding-top: 16px; padding-bottom: 32px; font-size: 13px; color: var(--ink-2); display: flex; gap: 16px; flex-wrap: wrap; }
+footer a { color: var(--ink-2); }

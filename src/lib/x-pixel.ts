@@ -1,5 +1,8 @@
 const X_PIXEL_ID = 'rfqm7'
 const X_DOWNLOAD_EVENT_ID = 'tw-rfqm7-rg3iv'
+// Create a "Sign up" conversion event in X Ads Manager and set its id here.
+const X_SIGNUP_EVENT_ID = import.meta.env.VITE_X_SIGNUP_EVENT_ID?.trim() ?? ''
+export const AD_OPT_OUT_KEY = 'openswarm:ads-opt-out'
 
 interface XWindow extends Window {
   twq?: {
@@ -52,8 +55,25 @@ function isDownloadLink(target: EventTarget | null) {
   }
 }
 
+/** Global Privacy Control or the site's "Your privacy choices" opt-out keeps ad tracking off. */
+export function adTrackingAllowed() {
+  if (typeof window === 'undefined') return false
+  if ((navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true) return false
+  try {
+    return localStorage.getItem(AD_OPT_OUT_KEY) !== '1'
+  } catch {
+    return true
+  }
+}
+
+/** Reports a completed waitlist signup as an X conversion, when configured and allowed. */
+export function trackXSignup() {
+  if (!installed || !X_SIGNUP_EVENT_ID || !adTrackingAllowed()) return
+  xWindow().twq?.('event', X_SIGNUP_EVENT_ID, {})
+}
+
 export function installXPixel() {
-  if (installed || typeof window === 'undefined') return
+  if (installed || typeof window === 'undefined' || !adTrackingAllowed()) return
   const hostname = window.location.hostname.toLowerCase().replace(/\.$/, '')
   // Keep local waitlist testing local; ad scripts can inspect form interactions.
   if (

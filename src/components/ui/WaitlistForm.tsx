@@ -10,6 +10,13 @@ import { OPEN_REFERRAL_EVENT, WaitlistReferralDialog, WaitlistShareButton } from
 import { normalizePhone, type CountryCode } from '@/lib/phone'
 import { incomingReferralCode, parseReferral, saveReferralCode, type Referral } from '@/lib/referral'
 import { LINKS } from '@/lib/utils'
+import { analyticsIds, flush, track } from '@/lib/analytics'
+import { trackXSignup } from '@/lib/x-pixel'
+import { prepareTurnstile, turnstileToken } from '@/lib/turnstile'
+import { WAITLIST_JOINED_EVENT } from '@/lib/waitlist-count'
+
+/** Stored with each signup. Change it whenever the consent wording below changes. */
+export const SMS_CONSENT_VERSION = 'sms-2026-09-30'
 
 export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
   const [phone, setPhone] = useState('')
@@ -25,6 +32,8 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
   const restoreInputFocus = useRef(false)
   const reducedMotion = useReducedMotion()
   const source = useRef<string>(placement)
+  const started = useRef(false)
+  const container = useRef<HTMLDivElement>(null)
   const id = placement === 'hero' ? 'waitlist-phone' : 'waitlist-closing-phone'
 
   useEffect(() => {
@@ -41,6 +50,18 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
       window.removeEventListener('os:waitlist', pick)
       window.removeEventListener(OPEN_REFERRAL_EVENT, share)
     }
+  }, [placement])
+
+  useEffect(() => {
+    const node = container.current
+    if (!node || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return
+      track('waitlist_view', { placement })
+      observer.disconnect()
+    }, { threshold: 0.5 })
+    observer.observe(node)
+    return () => observer.disconnect()
   }, [placement])
 
   useEffect(() => {
@@ -63,6 +84,7 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
     if (pending.current) return
     const normalized = normalizePhone(phone, country)
     if (!normalized) {
+      track('waitlist_error', { code: phone.trim() ? 'invalid_phone' : 'empty', country })
       setError('Enter a valid number and check the country code.')
       input.current?.focus({ preventScroll: true })
       return
@@ -70,21 +92,40 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
     pending.current = true
     setError('')
     setStatus('submitting')
+    const invitedBy = incomingReferralCode()
+    track('waitlist_submit', { placement, source: source.current, country, invited: !!invitedBy })
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 12000)
     const request = { controller, timeout }
     activeRequest.current = request
     try {
+      const verification = await turnstileToken()
+      if (activeRequest.current !== request) return
       const response = await fetch(`${import.meta.env.BASE_URL}api/waitlist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalized, source: source.current, referralCode: incomingReferralCode() }),
+        body: JSON.stringify({
+          phone: normalized,
+          source: source.current,
+          referralCode: invitedBy,
+          consentVersion: SMS_CONSENT_VERSION,
+          turnstileToken: verification,
+          ...analyticsIds(),
+        }),
         signal: controller.signal,
       })
       const result: unknown = await response.json()
       if (activeRequest.current !== request) return
       if (!response.ok || !result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) {
-        throw new Error('Signup unavailable')
+        track('waitlist_fail', { placement, status: String(response.status) })
+        throw new Error(response.status === 429 ? 'rate_limited' : 'Signup unavailable')
+      }
+      const added = response.status === 201
+      track('waitlist_success', { placement, source: source.current, added, invited: !!invitedBy })
+      flush()
+      if (added) {
+        trackXSignup()
+        window.dispatchEvent(new Event(WAITLIST_JOINED_EVENT))
       }
       const personalReferral = parseReferral(result)
       if (personalReferral) {
@@ -94,10 +135,10 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
       setPhone('')
       setStatus('success')
       setDialogOpen(true)
-    } catch {
+    } catch (failure) {
       if (activeRequest.current !== request) return
       setStatus('idle')
-      setError('Couldn’t join. Try again.')
+      setError(failure instanceof Error && failure.message === 'rate_limited' ? 'Too many attempts. Wait a few minutes and try again.' : 'Couldn’t join. Try again.')
     } finally {
       pending.current = false
       window.clearTimeout(timeout)
@@ -106,7 +147,7 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
   }
 
   return (
-    <div id={placement === 'hero' ? 'waitlist' : 'waitlist-closing'} className="waitlist relative mx-auto h-11 w-full max-w-[410px] scroll-mt-28">
+    <div ref={container} id={placement === 'hero' ? 'waitlist' : 'waitlist-closing'} className="waitlist relative mx-auto h-11 w-full max-w-[410px] scroll-mt-28">
       {status === 'success' ? (
         <motion.div id={placement === 'hero' ? 'waitlist-success' : 'waitlist-closing-success'} ref={success} tabIndex={-1} role="status" initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }} className="waitlist-success flex h-11 items-center justify-center gap-2 rounded-[8px] px-3 text-[13px] focus-visible:outline-2 focus-visible:outline-offset-4">
           <SuccessParticles active className="h-6 w-6 rounded-full bg-white/75 ring-1 ring-black/10">
@@ -127,7 +168,7 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
             <LiquidGlassInput
               ref={input}
               country={country}
-              onCountryChange={(next) => { setCountry(next); setError(''); input.current?.focus({ preventScroll: true }) }}
+              onCountryChange={(next) => { setCountry(next); setError(''); track('waitlist_country', { country: next }); input.current?.focus({ preventScroll: true }) }}
               id={id}
               name="phone"
               type="tel"
@@ -141,7 +182,13 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
               required
               disabled={status === 'submitting'}
               aria-invalid={!!error}
-              aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`}
+              aria-describedby={`${id}-hint ${id}-consent${error ? ` ${id}-error` : ''}`}
+              onFocus={() => {
+                prepareTurnstile()
+                if (started.current) return
+                started.current = true
+                track('waitlist_start', { placement })
+              }}
               onChange={(event) => { setPhone(event.target.value); if (error) setError('') }}
               onBlur={() => {
                 // A pasted international number selects its real region and avoids a duplicated prefix.
@@ -157,9 +204,13 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
             {status === 'submitting' ? <><LoaderCircle size={15} strokeWidth={1.75} aria-hidden className="motion-safe:animate-spin" /><span>Joining…</span></> : <><RollText>Join free waitlist</RollText><ArrowRight size={20} strokeWidth={1.8} aria-hidden className="liquid-action-arrow hidden min-[440px]:block" /></>}
           </LiquidMetalButton>
           <div className="absolute inset-x-0 top-full mt-2 text-center text-[10.5px] leading-[1.4]">
-            {error ? <p id={`${id}-error`} role="alert" className="text-[#9f2424]">{error}</p> : <p className="text-ink/65">Early-access updates by text.{LINKS.privacy && <>{' '}<a href={LINKS.privacy} target="_blank" rel="noreferrer" className="underline decoration-black/25 underline-offset-2 hover:text-ink">Privacy</a></>}</p>}
-            <p id={`${id}-hint`} className="sr-only">Use the country selector for national phone numbers. You can also paste a full number beginning with + and its country code. Join for early-access updates by phone.</p>
-            {!error && <p className="mt-0.5 text-ink/70 opacity-0 transition-opacity group-focus-within/form:opacity-100">Choose your country, or paste a full +number.</p>}
+            {error && <p id={`${id}-error`} role="alert" className="mb-0.5 text-[#9f2424]">{error}</p>}
+            <p id={`${id}-consent`} className="mx-auto max-w-[380px] text-ink/65">
+              By joining, you agree to receive recurring automated marketing texts from Open Swarm at this number. Consent is not a condition of purchase. Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.
+              {' '}<a href={LINKS.privacy} className="underline decoration-black/25 underline-offset-2 hover:text-ink">Privacy</a>
+              {' · '}<a href={LINKS.terms} className="underline decoration-black/25 underline-offset-2 hover:text-ink">Terms</a>
+            </p>
+            <p id={`${id}-hint`} className="sr-only">Use the country selector for national phone numbers. You can also paste a full number beginning with + and its country code.</p>
           </div>
         </form>
       )}

@@ -6,6 +6,7 @@ import { Button1 } from './button-1'
 import { cn, media } from '@/lib/utils'
 import { clearSavedReferralCode, parseReferral, referralLink, savedReferralCode, type Referral } from '@/lib/referral'
 import './waitlist-referral.css'
+import { track } from '@/lib/analytics'
 
 export const OPEN_REFERRAL_EVENT = 'os:share-waitlist'
 
@@ -45,6 +46,12 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
   const candidateCode = initialReferral?.code ?? savedReferralCode()
   const code = candidateCode === invalidCode ? null : candidateCode
   const link = referral ? referralLink(referral.code) : ''
+
+  // Once per opening; how the dialog was opened does not re-trigger it.
+  const openedAfterJoin = useRef(justJoined)
+  useEffect(() => {
+    track('referral_open', { just_joined: openedAfterJoin.current })
+  }, [])
 
   useEffect(() => {
     const node = dialog.current
@@ -112,6 +119,7 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(link)
+      track('referral_copy')
       setCopied(true)
       setFeedback('Invite link copied.')
       if (copyReset.current !== null) window.clearTimeout(copyReset.current)
@@ -126,6 +134,7 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
   async function shareLink() {
     try {
       await navigator.share({ title: 'Everyone gets a Jarvis now.', text: 'Join me on the free Open Swarm waitlist. Your free AI desktop for Mac.', url: link })
+      track('referral_share')
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return
       await copyLink()

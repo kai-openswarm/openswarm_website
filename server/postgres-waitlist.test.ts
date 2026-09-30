@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { Pool, type PoolClient } from 'pg'
 import { createPostgresWaitlistStore } from './postgres-waitlist.ts'
+import { applyMigrations, withTestDatabase } from './test-database.ts'
 
 type Call = { text: string, values: unknown[] | undefined }
 type Step = { contains: string, rows?: unknown[], error?: Error }
@@ -30,6 +29,7 @@ test('SQL signup commits parameterized canonical values before returning referra
   const fixture = scriptedDatabase([
     { contains: 'BEGIN ISOLATION LEVEL READ COMMITTED' },
     { contains: 'ON CONFLICT (phone) DO NOTHING', rows: [{ referral_code: code }] },
+    { contains: 'analytics.attribute_signup' },
     { contains: 'COUNT(invitee.phone)', rows: [{ referral_code: code, count: 0 }] },
     { contains: 'COMMIT' },
   ])
@@ -38,7 +38,7 @@ test('SQL signup commits parameterized canonical values before returning referra
   assert.deepEqual(await store.add('+12025550123', source, inviter), {
     added: true, referral: { code, count: 0, goal: 3, priorityAccess: false },
   })
-  assert.deepEqual(fixture.calls[1].values, ['+12025550123', source, code, inviter])
+  assert.deepEqual(fixture.calls[1].values, ['+12025550123', source, code, inviter, null, null])
   assert.ok(!fixture.calls[1].text.includes(source))
   assert.ok(!fixture.calls[1].text.includes('+12025550123'))
   assert.equal(fixture.releases(), 1)
@@ -83,6 +83,7 @@ test('rare share-code collisions retry a fresh transaction and a new random code
     { contains: 'ROLLBACK' },
     { contains: 'BEGIN' },
     { contains: 'INSERT INTO', rows: [{ referral_code: code }] },
+    { contains: 'analytics.attribute_signup' },
     { contains: 'COUNT(invitee.phone)', rows: [{ referral_code: code, count: 0 }] },
     { contains: 'COMMIT' },
   ])
@@ -105,18 +106,11 @@ test('public referral lookup returns only progress or null', async () => {
 })
 
 test('real PostgreSQL migration, concurrent dedupe and first-referral attribution', {
-  skip: !process.env.TEST_DATABASE_URL && 'Set TEST_DATABASE_URL to an isolated PostgreSQL test database.',
+  skip: !process.env.TEST_DATABASE_URL && 'Set TEST_DATABASE_URL to a PostgreSQL server where the test may create databases.',
 }, async () => {
-  // A fresh schema isolates the suite. Cleanup drops only the UUID-named schema created here.
-  const schema = `waitlist_test_${randomUUID().replaceAll('-', '')}`
-  const control = new Pool({ connectionString: process.env.TEST_DATABASE_URL, max: 1 })
-  let database: Pool | undefined
-  try {
-    await control.query(`CREATE SCHEMA "${schema}"`)
-    database = new Pool({ connectionString: process.env.TEST_DATABASE_URL, max: 8, options: `-c search_path=${schema}` })
-    const migration = await readFile(new URL('../sql/001_waitlist.sql', import.meta.url), 'utf8')
-    await database.query(migration)
-    await database.query(migration)
+  await withTestDatabase(async (database) => {
+    // Migrations are idempotent; applying them twice must not fail.
+    await applyMigrations(database)
     const store = createPostgresWaitlistStore(database)
     const inviter = (await store.add('+12025550123', 'test')).referral
     const other = (await store.add('+12025550124', 'test')).referral
@@ -133,11 +127,7 @@ test('real PostgreSQL migration, concurrent dedupe and first-referral attributio
     assert.equal(rows.rows.filter((row) => row.referred_by === inviter.code).length, 3)
     assert.ok(rows.rows.every((row) => row.source === 'test'))
     assert.equal(rows.rows.at(-1).referred_by, null)
-    const rls = await database.query('SELECT relrowsecurity FROM pg_class WHERE oid = $1::regclass', [`${schema}.waitlist_signups`])
+    const rls = await database.query("SELECT relrowsecurity FROM pg_class WHERE oid = 'public.waitlist_signups'::regclass")
     assert.equal(rls.rows[0].relrowsecurity, true)
-  } finally {
-    await database?.end()
-    await control.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-    await control.end()
-  }
+  })
 })

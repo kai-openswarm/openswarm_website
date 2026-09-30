@@ -98,7 +98,7 @@ export function Marketplace() {
   const live = apps.filter((a) => !a.draft)
   const soon = apps.filter((a) => a.draft)
   return (
-    <section id="marketplace" className="relative">
+    <section id="marketplace" data-section="marketplace" className="relative">
       <div className="bg-bg-alt px-5 py-20 sm:px-8 sm:py-28 lg:mx-auto lg:w-[calc(100%-64px)] lg:max-w-[1240px]">
         <SectionHeading title={<GradientText className="gradient-text--swarm">Agent marketplace</GradientText>} sub="Apps your agents use inside Open Swarm to find leads, validate problems and more." />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -7,10 +7,12 @@ import { WaitlistForm } from './ui/WaitlistForm'
 import { WaitlistShareButton } from './ui/WaitlistReferral'
 import { media } from '@/lib/utils'
 import { NumberTicker } from './ui/number-ticker'
+import { useWaitlistCount } from '@/lib/waitlist-count'
 
 export function Hero() {
+  const waitlistCount = useWaitlistCount()
   return (
-    <section id="top" className="relative px-2 pt-2 sm:px-3 sm:pt-3">
+    <section id="top" data-section="top" className="relative px-2 pt-2 sm:px-3 sm:pt-3">
       <div className="relative isolate [--hero-reveal:18px] sm:[--hero-reveal:70px]">
         <div className="pointer-events-none absolute inset-x-0 top-0 bottom-[var(--hero-reveal)] overflow-hidden rounded-[20px] border border-[#6197a6]/20 sm:rounded-[28px]">
           <Sky className="absolute inset-0" />
@@ -38,9 +40,9 @@ export function Hero() {
           <div className="mt-5">
             <WaitlistForm placement="hero" />
           </div>
-          <div className="mx-auto mt-9 flex min-h-10 flex-wrap items-center justify-center gap-2 text-[#35515a]">
+          <div className="mx-auto mt-[76px] flex min-h-10 flex-wrap items-center justify-center gap-2 text-[#35515a]">
             <p className="inline-flex h-10 items-center gap-2">
-              <NumberTicker value={6327} className="font-semibold tracking-[-0.03em] text-[#52268b] text-[21px]" />
+              <NumberTicker value={waitlistCount} className="font-semibold tracking-[-0.03em] text-[#52268b] text-[21px]" />
               <span className="text-[11.5px] font-medium text-[#3f5260]">on the waitlist</span>
             </p>
             <WaitlistShareButton />

@@ -44,12 +44,14 @@ stage = previews / project
 if previews.is_symlink() or stage.is_symlink():
     raise SystemExit('The deployment staging path cannot be a symbolic link.')
 items = [
-    'src', 'public', 'api', 'server', 'sql', 'package.json', 'package-lock.json',
-    'index.html', 'vite.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json',
+    'src', 'public', 'api', 'server', 'sql', 'admin', 'privacy', 'terms', 'package.json', 'package-lock.json',
+    'index.html', 'vite.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'vercel.json',
 ]
 required = [
-    'api/waitlist.ts', 'api/waitlist/referral.ts', 'server/production-waitlist.ts',
-    'server/postgres-waitlist.ts', 'server/waitlist.ts', 'sql/001_waitlist.sql',
+    'api/waitlist.ts', 'api/waitlist/referral.ts', 'api/collect.ts', 'api/stats.ts', 'api/admin/invite.ts',
+    'server/production-waitlist.ts', 'server/postgres-waitlist.ts', 'server/postgres-analytics.ts',
+    'server/analytics.ts', 'server/admin-invite.ts', 'server/http.ts', 'server/waitlist.ts',
+    'sql/001_waitlist.sql', 'sql/002_analytics.sql',
 ]
 for name in items + required:
     candidate = root / name
@@ -89,15 +91,13 @@ if re.search(r'<meta\s+name=[\"\x27]robots[\"\x27][^>]*>', markup, re.I):
 else:
     markup = markup.replace('<head>', '<head>\n    ' + robots, 1)
 page.write_text(markup)
-(stage / 'vercel.json').write_text(json.dumps({
-    'framework': 'vite',
-    'buildCommand': 'npm run build',
-    'outputDirectory': 'dist',
-    'headers': [
-        {'source': '/(.*)', 'headers': [{'key': 'X-Robots-Tag', 'value': 'noindex, nofollow'}]},
-        {'source': '/media/(.*)', 'headers': [{'key': 'Cache-Control', 'value': 'public, max-age=86400'}]},
-    ],
-}, indent=2) + '\n')
+# Keep the production routing and headers, and keep every preview page out of search results.
+vercel_config = json.loads((stage / 'vercel.json').read_text())
+vercel_config['headers'] = [
+    {'source': '/(.*)', 'headers': [{'key': 'X-Robots-Tag', 'value': 'noindex, nofollow'}]},
+    *vercel_config.get('headers', []),
+]
+(stage / 'vercel.json').write_text(json.dumps(vercel_config, indent=2) + '\n')
 (stage / '.vercelignore').write_text('.data\n.env\n.env.*\n')
 print(f'Full website and waitlist API prepared at {stage}')
 PY
@@ -138,14 +138,14 @@ run_vercel pull --yes --environment=production
 npm ci
 run_vercel build --prod
 
-# A successful frontend build is insufficient: both Node functions must be in the artifact.
+# A successful frontend build is insufficient: every Node function must be in the artifact.
 python3 - "$STAGE/.vercel/output" <<'PY'
 import json, sys
 from pathlib import Path
 output = Path(sys.argv[1])
 if not (output / 'static' / 'index.html').is_file():
     raise SystemExit('Vercel did not produce the website. Nothing has been deployed.')
-for name in ('api/waitlist', 'api/waitlist/referral'):
+for name in ('api/waitlist', 'api/waitlist/referral', 'api/collect', 'api/stats', 'api/admin/invite'):
     bundle = output / 'functions' / f'{name}.func'
     config_file = bundle / '.vc-config.json'
     if not config_file.is_file():
@@ -154,7 +154,7 @@ for name in ('api/waitlist', 'api/waitlist/referral'):
     handler = config.get('handler')
     if not str(config.get('runtime', '')).startswith('nodejs') or not isinstance(handler, str) or not (bundle / handler).is_file():
         raise SystemExit(f'Invalid Node API bundle: {name}. Nothing has been deployed.')
-print('Website and both waitlist API function bundles verified.')
+print('Website and all API function bundles verified.')
 PY
 
 run_vercel deploy --prebuilt --prod --yes

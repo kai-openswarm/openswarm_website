@@ -26,7 +26,10 @@ Missing `DATABASE_URL`, an unavailable database, or an unapplied migration retur
 
    ```sh
    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/001_waitlist.sql
+   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/002_analytics.sql
    ```
+
+   `002_analytics.sql` adds the consent record and network hash to signups, the private `analytics` schema, and the admin dashboard functions. The signup API requires it: new signups record attribution in the same transaction. See [analytics](analytics.md).
 
 3. Set the hosting project's server-only `DATABASE_URL`. Do not prefix this secret with `VITE_`. Use the provider's recommended pooled/TLS connection string where applicable; the code does not disable certificate verification.
 4. The migration creates a private table with row-level security and no public policy. The server connection should use the table owner, or an explicitly configured server role with a matching private RLS policy. A browser/anonymous key is not a database credential for this API.

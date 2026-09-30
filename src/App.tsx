@@ -3,6 +3,7 @@ import Lenis from 'lenis'
 import { MotionConfig } from 'motion/react'
 import { setLenis } from './lib/scroll'
 import { installXPixel } from './lib/x-pixel'
+import { startAnalytics } from './lib/analytics'
 import { Nav } from './components/Nav'
 import { Hero } from './components/Hero'
 import { Intro } from './components/Intro'
@@ -14,6 +15,7 @@ import { Seam } from './components/ui/Seam'
 
 export default function App() {
   useEffect(() => {
+    startAnalytics()
     installXPixel()
   }, [])
 

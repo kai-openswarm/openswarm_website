@@ -8,6 +8,7 @@ import { RecruitingPanel } from './usecases/RecruitingPanel'
 import { ResearchPanel } from './usecases/ResearchPanel'
 import { B, type Brand } from '@/lib/brands'
 import { cn, EASE, media } from '@/lib/utils'
+import { track } from '@/lib/analytics'
 
 /*
   Use cases by team, the answer to Alex's "are we having a business tab?" (3:49) and the
@@ -106,7 +107,7 @@ export function UseCases() {
     }
   }, [])
   return (
-    <section id="use-cases" className="py-20 sm:py-28">
+    <section id="use-cases" data-section="use-cases" className="py-20 sm:py-28">
       <div className="mx-auto px-5 sm:px-8 lg:w-[calc(100%-64px)] lg:max-w-[1240px]">
         <SectionHeading title="One desktop for every team." sub="Hand the repetitive, multi-step work to a swarm, whether you sell, run operations, hire or research." />
 
@@ -122,7 +123,7 @@ export function UseCases() {
               aria-selected={k === i}
               aria-controls="uc-panel"
               tabIndex={k === i ? 0 : -1}
-              onClick={() => setI(k)}
+              onClick={() => { if (k !== i) track('tab', { group: 'use-cases', tab: x.key }); setI(k) }}
               onKeyDown={(event) => {
                 let next: number
                 if (event.key === 'ArrowRight') next = (i + 1) % CASES.length
@@ -131,6 +132,7 @@ export function UseCases() {
                 else if (event.key === 'End') next = CASES.length - 1
                 else return
                 event.preventDefault()
+                track('tab', { group: 'use-cases', tab: CASES[next].key })
                 setI(next)
                 tabs.current[next]?.focus({ preventScroll: true })
               }}

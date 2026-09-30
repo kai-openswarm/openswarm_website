@@ -11,7 +11,7 @@ const product = [
 ]
 const groups = [
   { title: 'Community', links: [['Discord', LINKS.discord], ['X / Twitter', LINKS.x]] },
-  { title: 'Legal', links: [['Privacy', LINKS.privacy], ['Terms', LINKS.terms]].filter(([, href]) => href) },
+  { title: 'Legal', links: [['Privacy', LINKS.privacy], ['Terms', LINKS.terms], ['Your privacy choices', LINKS.privacyChoices]] },
 ].filter((group) => group.links.length > 0)
 
 function FooterLinks({ title, links }: { title: string; links: string[][] }) {
@@ -38,7 +38,7 @@ function FooterLinks({ title, links }: { title: string; links: string[][] }) {
 export function Closing() {
   const reduce = useReducedMotion()
   return (
-    <footer className="relative px-2 pb-3 pt-10 sm:px-3 sm:pb-5 sm:pt-12 lg:px-0">
+    <footer data-section="closing" className="relative px-2 pb-3 pt-10 sm:px-3 sm:pb-5 sm:pt-12 lg:px-0">
       <div className="relative isolate mx-auto flex min-h-[600px] max-w-[1240px] flex-col overflow-hidden rounded-[22px] bg-[#eee9dc] ring-1 ring-inset ring-[#30476e]/10 lg:min-h-[480px] lg:w-[calc(100%-64px)]">
         <img
           src={media('footer-cobalt-coast.webp')}

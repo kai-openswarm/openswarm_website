@@ -141,7 +141,7 @@ function CapCard({ c, i }: { c: Card; i: number }) {
 
 export function Capabilities() {
   return (
-    <section id="capabilities" className="relative">
+    <section id="capabilities" data-section="capabilities" className="relative">
       {/* the gray band stays inside the two guide lines, like Aside's */}
       <div className="bg-bg-alt px-5 pb-20 pt-20 sm:px-8 sm:pb-28 sm:pt-28 lg:mx-auto lg:w-[calc(100%-64px)] lg:max-w-[1240px]">
         <Reveal className="text-center">

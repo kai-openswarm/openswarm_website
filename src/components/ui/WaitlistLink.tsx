@@ -10,6 +10,7 @@ export function WaitlistLink({ source = 'nav', children, className, onClick, ...
     <a
       {...props}
       href="#waitlist"
+      data-track={`waitlist-link:${source}`}
       className={cn('waitlist-link group inline-flex items-center justify-center gap-2', className)}
       onClick={(event) => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || (event.currentTarget.target && event.currentTarget.target !== '_self')) return
