@@ -3,7 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { waitUntil } from '@vercel/functions'
 import { Pool } from 'pg'
 import { createCollectHandler, parseUserAgent, type AnalyticsStore } from './analytics.ts'
-import { readEmailDeliveryConfig, type EmailDeliverySetup } from './email-delivery.ts'
+import { emailPublicUrl, readEmailDeliveryConfig, type EmailDeliverySetup } from './email-delivery.ts'
+import { createClickHandler, createOpenHandler, createResendWebhookHandler, type EmailEvent } from './email-tracking.ts'
 import { createUnsubscribeHandler } from './email-unsubscribe.ts'
 import { RequestError, clientIp, hashValue, hashingSecret, header, originAllowed, requestGeo } from './http.ts'
 import { createPostgresAnalyticsStore } from './postgres-analytics.ts'
@@ -236,3 +237,23 @@ export function handleProductionUnsubscribe(request: IncomingMessage, response: 
     async unsubscribe(code) { await database.query('SELECT analytics.unsubscribe($1)', [code]) },
   })(request, response)
 }
+
+/** Stores an email open, click or provider event; unknown emails are ignored. */
+function recordEmailEvent(event: EmailEvent) {
+  const database = productionPool()
+  if (!database) return Promise.reject(new Error('A database connection is required.'))
+  return database.query('SELECT analytics.record_email_event($1::jsonb)', [JSON.stringify(event)])
+}
+
+function trackingDeps() {
+  return {
+    secret: process.env.WAITLIST_EMAIL_SECRET?.trim() || hashingSecret(),
+    publicUrl: emailPublicUrl() ?? 'https://openswarm.com',
+    record: recordEmailEvent,
+  }
+}
+
+export const handleEmailOpen = (request: IncomingMessage, response: ServerResponse) => createOpenHandler(trackingDeps())(request, response)
+export const handleEmailClick = (request: IncomingMessage, response: ServerResponse) => createClickHandler(trackingDeps())(request, response)
+export const handleResendWebhook = (request: IncomingMessage, response: ServerResponse) =>
+  createResendWebhookHandler({ secret: process.env.RESEND_WEBHOOK_SECRET?.trim(), record: recordEmailEvent })(request, response)

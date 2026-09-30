@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, Ban, Loader2, Send } from 'lucide-react'
 import { useApi, useNow, useQuery, useView } from '../hooks'
 import { useRoute } from '../nav'
+import { EmailEngagementSection } from './EmailEngagement'
 import { fmtAgo, fmtDateTime, fmtInt, fmtPct } from '../format'
 import { errorMessage } from '../errors'
 import { MAJOR_PROVIDERS, MAX_BLOCKED_DOMAINS } from '../validation'
@@ -134,6 +135,8 @@ export function EmailPage() {
           <SendPending onDone={q.reload} />
         </div>
       </Panel>
+
+      <EmailEngagementSection r={r} />
 
       {q.error && !d ? (
         <div className="rounded-lg border border-line bg-panel"><ErrorState error={q.error} onRetry={q.reload} /></div>

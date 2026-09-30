@@ -379,3 +379,36 @@ export interface EmailReport {
   /** Top 200 domains of email signups in range. */
   domains: { domain: string; signups: number }[]
 }
+
+export interface EmailKindEngagement {
+  kind: EmailKind
+  sent: number
+  /** delivered/bounced/complained come only from Resend webhooks (emails the Resend backup sent). */
+  delivered: number
+  bounced: number
+  complained: number
+  /** Distinct emails opened / clicked, excluding automated (scanner) events. */
+  opened: number
+  clicked: number
+  clicks: number
+  /** Opens and clicks attributed to scanners and bots; excluded from the rates. */
+  automated: number
+  unsubscribed: number
+  open_rate: number
+  click_rate: number
+  click_to_open: number
+  unsubscribe_rate: number
+  bounce_rate: number
+}
+
+export type EmailLink = 'share' | 'explore' | 'resend_link'
+
+export interface EmailEngagement {
+  kinds: EmailKindEngagement[]
+  links: { kind: EmailKind; link: EmailLink | string; clicks: number; people: number }[]
+  /** day is "YYYY-MM-DD" in the database time zone. */
+  daily: { day: string; sent: number; opened: number; clicked: number }[]
+  /** Webhook events from Resend in the range; 0 means no Resend-only numbers are available. */
+  resend_events: number
+  tests: { opens: number; clicks: number }
+}

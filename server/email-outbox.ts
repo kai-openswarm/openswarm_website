@@ -12,7 +12,7 @@ export type EmailPayload = {
   reply_to?: string
   headers?: Record<string, string>
 }
-export type EmailMessage = { kind: EmailKind, referralCode: string, email: string, createdAt: string }
+export type EmailMessage = { id: string, kind: EmailKind, referralCode: string, email: string, createdAt: string }
 export type EmailWorker = {
   render: (message: EmailMessage) => EmailPayload | Promise<EmailPayload>
   send: (payload: EmailPayload, idempotencyKey: string) => Promise<{ id: string }>
@@ -102,7 +102,7 @@ export function createEmailOutbox(database: Database) {
           serialized = job.payload
         } else {
           const payload = await render({
-            kind: job.kind, referralCode: job.referral_code, email: job.email,
+            id: job.id, kind: job.kind, referralCode: job.referral_code, email: job.email,
             createdAt: new Date(job.created_at).toISOString(),
           })
           validatePayload(payload, job.email)

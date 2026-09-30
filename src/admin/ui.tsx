@@ -393,6 +393,8 @@ export interface Column<T> {
   info?: string
   /** CSV value; defaults to the sort value. Columns with neither are left out of the CSV. */
   csv?: (row: T) => unknown
+  /** Only in the CSV, not on screen. */
+  csvOnly?: boolean
 }
 
 export function DataTable<T>({ columns, rows, rowKey, defaultSort, onRowClick, rowLabel, caption, dense, csvName }: {
@@ -421,13 +423,14 @@ export function DataTable<T>({ columns, rows, rowKey, defaultSort, onRowClick, r
   }, [rows, columns, sort])
 
   const csvCols = columns.filter((c) => c.csv || c.sort)
+  const shown = columns.filter((c) => !c.csvOnly)
   const table = (
     <div className="relative -mx-4 overflow-x-auto">
       <table className="w-full min-w-max border-collapse text-[13px]">
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>
           <tr className="border-b border-line text-[11.5px] tracking-wide text-ink-3 uppercase">
-            {columns.map((c, i) => {
+            {shown.map((c, i) => {
               const active = sort?.key === c.key
               const aria = active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined
               return (
@@ -435,7 +438,7 @@ export function DataTable<T>({ columns, rows, rowKey, defaultSort, onRowClick, r
                   key={c.key}
                   scope="col"
                   aria-sort={aria}
-                  className={clsx('h-8 font-medium whitespace-nowrap', c.align === 'right' ? 'text-right' : 'text-left', i === 0 ? 'pl-4 pr-3' : i === columns.length - 1 ? 'pl-3 pr-4' : 'px-3')}
+                  className={clsx('h-8 font-medium whitespace-nowrap', c.align === 'right' ? 'text-right' : 'text-left', i === 0 ? 'pl-4 pr-3' : i === shown.length - 1 ? 'pl-3 pr-4' : 'px-3')}
                 >
                   <span className={clsx('inline-flex items-center gap-1', c.align === 'right' && 'flex-row-reverse')}>
                     {c.sort ? (
@@ -462,14 +465,14 @@ export function DataTable<T>({ columns, rows, rowKey, defaultSort, onRowClick, r
               className={clsx('border-b border-line last:border-0', onRowClick && 'cursor-pointer hover:bg-hover')}
               onClick={onRowClick ? () => onRowClick(r) : undefined}
             >
-              {columns.map((c, i) => (
+              {shown.map((c, i) => (
                 <td
                   key={c.key}
                   className={clsx(
                     dense ? 'h-8' : 'h-9',
                     'whitespace-nowrap',
                     c.align === 'right' ? 'text-right num' : 'text-left',
-                    i === 0 ? 'pl-4 pr-3' : i === columns.length - 1 ? 'pl-3 pr-4' : 'px-3',
+                    i === 0 ? 'pl-4 pr-3' : i === shown.length - 1 ? 'pl-3 pr-4' : 'px-3',
                     c.className,
                   )}
                 >

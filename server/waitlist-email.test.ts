@@ -31,7 +31,7 @@ test('priority confirms eligibility without claiming the product is already acce
   assert.match(email.subject, /priority early access/)
   assert.match(email.text, /Three friends joined/)
   assert.match(email.text, /Access arrives in a separate invitation/)
-  assert.match(email.html, /href="https:\/\/example.com\/launch\/#product"/)
+  assert.match(email.html, /href="https:\/\/example.com\/launch\/\?utm_source=waitlist-email&amp;utm_medium=email&amp;utm_campaign=priority#product"/)
   assert.doesNotMatch(email.html, /mailto:|Invite 3 friends|Download now|account is ready/i)
 })
 

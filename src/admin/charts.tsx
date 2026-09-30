@@ -322,3 +322,41 @@ export function ColumnChart({ data, label, valueLabel, height = 200 }: { data: {
     </div>
   )
 }
+
+/** A few daily series as lines, with a legend (fixed colours, one y axis). */
+export function DailyLines({ data, series, label, height = 200 }: {
+  data: ({ day: string } & Record<string, number | string>)[]
+  series: { key: string; label: string; color: string }[]
+  label: string
+  height?: number
+}) {
+  return (
+    <div>
+      <div style={{ height }} role="img" aria-label={label}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
+            <CartesianGrid vertical={false} stroke="var(--grid)" />
+            <XAxis dataKey="day" tick={axisTick} tickLine={false} axisLine={{ stroke: 'var(--line-strong)' }} minTickGap={24} tickFormatter={(d: string) => bucketTick(parseLocal(d), 'day', false)} />
+            <YAxis tick={axisTick} tickLine={false} axisLine={false} allowDecimals={false} width={40} tickFormatter={(v: number) => fmtCompact(v)} />
+            <Tooltip
+              cursor={{ stroke: 'var(--line-strong)' }}
+              content={({ active, payload }) => {
+                const p = payload?.[0]?.payload as ({ day: string } & Record<string, number>) | undefined
+                if (!active || !p) return null
+                return <TipBox title={bucketTitle(parseLocal(p.day), 'day')} rows={series.map((x) => ({ label: x.label, value: fmtInt(Number(p[x.key] ?? 0)), color: x.color }))} />
+              }}
+            />
+            {series.map((x) => (
+              <Line key={x.key} type="monotone" dataKey={x.key} stroke={x.color} strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--panel)' }} isAnimationActive={false} />
+            ))}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <ul className="mt-2 flex flex-wrap gap-x-3 text-[12px] text-ink-2" aria-label="Legend">
+        {series.map((x) => (
+          <li key={x.key} className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: x.color }} aria-hidden />{x.label}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}

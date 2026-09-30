@@ -5,7 +5,7 @@
 import type { AdminApi } from './api'
 import { ApiError } from './api'
 import type {
-  AdminSettings, Annotation, AuditEntry, EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
+  AdminSettings, Annotation, AuditEntry, EmailEngagement, EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
   Kpis, Overview, Performance, RangeQuery, Realtime, RealtimeEvent, Referrals, SectionKey, SettingValues, SignupRow, TimeseriesPoint, VitalRow, WelcomeEmail,
 } from './types'
 import { NONE } from './types'
@@ -552,6 +552,31 @@ function countBy<T>(items: T[], key: (t: T) => string) {
   const m = new Map<string, number>()
   for (const it of items) m.set(key(it), (m.get(key(it)) ?? 0) + 1)
   return m
+}
+
+/** Deterministic engagement for one sent email (opens/clicks from the tracking pixel and button). */
+function engagementFor(j: MockEmailJob, unsubscribedAt: number | null) {
+  let h = 2166136261
+  for (const ch of `${j.code}|${j.kind}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619)
+  const rand = mulberry32(h)
+  const now = Date.now()
+  const sentAt = j.created_at + 5000
+  const viaResend = rand() < 0.08
+  const opened = rand() < (j.kind === 'priority' ? 0.68 : 0.52)
+  const openAt = opened ? Math.min(now, sentAt + Math.floor(rand() * rand() * 2 * DAY)) : null
+  const clicked = opened && rand() < (j.kind === 'priority' ? 0.34 : 0.21)
+  const clicks = clicked ? 1 + (rand() < 0.3 ? 1 : 0) : 0
+  const clickAt = clicked && openAt !== null ? Math.min(now, openAt + Math.floor(rand() * 600_000)) : null
+  const delivered = viaResend && rand() < 0.97
+  return {
+    sentAt, viaResend, openAt, clicks, clickAt,
+    automated: rand() < 0.12 ? 1 + Math.floor(rand() * 2) : 0,
+    delivered,
+    bounced: viaResend && !delivered,
+    complained: delivered && rand() < 0.01,
+    unsubscribed: unsubscribedAt !== null && unsubscribedAt > sentAt,
+    link: viaResend ? 'resend_link' : j.kind === 'priority' ? 'explore' : 'share',
+  }
 }
 
 const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c)
@@ -1167,6 +1192,66 @@ export function createMockApi(): AdminApi {
       const i = annotations.findIndex((x) => x.id === id)
       if (i >= 0) annotations.splice(i, 1)
       audited('delete_annotation', { id })
+    }),
+
+    emailEngagement: (r) => delay((): EmailEngagement => {
+      const a = Date.parse(r.from)
+      const b = Date.parse(r.to)
+      const byCode = new Map(data.signups.map((x) => [x.code, x]))
+      const noResend = new URLSearchParams(window.location.search).get('mocknoresend') === '1'
+      const sent = data.jobs.filter((j) => j.created_at >= a && j.created_at < b && j.status === 'sent')
+        .map((j) => {
+          const e = engagementFor(j, byCode.get(j.code)?.unsubscribed_at ?? null)
+          // ?mocknoresend=1: pretend the Resend backup sent nothing.
+          if (noResend && e.viaResend) Object.assign(e, { viaResend: false, delivered: false, bounced: false, complained: false, link: j.kind === 'priority' ? 'explore' : 'share' })
+          return { j, e }
+        })
+      const kinds = (['welcome', 'priority'] as const).map((kind) => {
+        const k = sent.filter((x) => x.j.kind === kind)
+        const n = (f: (x: (typeof k)[number]) => boolean) => k.filter(f).length
+        const s2 = k.length
+        const opened = n((x) => x.e.openAt !== null)
+        const clicked = n((x) => x.e.clicks > 0)
+        const bounced = n((x) => x.e.bounced)
+        const unsubscribed = n((x) => x.e.unsubscribed)
+        return {
+          kind, sent: s2, delivered: n((x) => x.e.delivered), bounced, complained: n((x) => x.e.complained), opened, clicked,
+          clicks: k.reduce((t, x) => t + x.e.clicks, 0), automated: k.reduce((t, x) => t + x.e.automated, 0), unsubscribed,
+          open_rate: s2 ? r4(opened / s2) : 0, click_rate: s2 ? r4(clicked / s2) : 0, click_to_open: opened ? r4(clicked / opened) : 0,
+          unsubscribe_rate: s2 ? r4(unsubscribed / s2) : 0, bounce_rate: s2 ? r4(bounced / s2) : 0,
+        }
+      })
+      const links = new Map<string, { kind: EmailKind; link: string; clicks: number; people: number }>()
+      for (const { j, e } of sent) if (e.clicks) {
+        const k = `${j.kind}|${e.link}`
+        const row = links.get(k) ?? { kind: j.kind, link: e.link, clicks: 0, people: 0 }
+        row.clicks += e.clicks
+        row.people++
+        links.set(k, row)
+      }
+      const days = new Map<string, { day: string; sent: number; opened: number; clicked: number }>()
+      for (let t = new Date(a); t.getTime() < b; t.setDate(t.getDate() + 1)) {
+        const day = localStamp(t.getTime()).slice(0, 10)
+        days.set(day, { day, sent: 0, opened: 0, clicked: 0 })
+      }
+      const bump = (at: number | null, f: 'sent' | 'opened' | 'clicked') => {
+        if (at === null) return
+        const row = days.get(localStamp(at).slice(0, 10))
+        if (row) row[f]++
+      }
+      for (const { e } of sent) {
+        bump(e.sentAt, 'sent')
+        bump(e.openAt, 'opened')
+        bump(e.clickAt, 'clicked')
+      }
+      const resendEvents = sent.filter((x) => x.e.viaResend).reduce((t, x) => t + 1 + (x.e.openAt ? 1 : 0) + x.e.clicks, 0)
+      return {
+        kinds,
+        links: [...links.values()].sort((x, y) => y.clicks - x.clicks),
+        daily: [...days.values()],
+        resend_events: resendEvents,
+        tests: { opens: 3, clicks: 1 },
+      }
     }),
 
     emailReport: (r) => delay((): EmailReport => {

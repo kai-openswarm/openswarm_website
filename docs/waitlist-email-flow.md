@@ -66,7 +66,19 @@ Workers use row locks, expiring leases, and lease tokens so competing workers do
 
 There are at most eight attempts, and retries stop 23 hours after the first attempt. Do not reset an expired job and resend blindly. A job left pending goes out with the next signup, the daily Vercel Cron run, or **Email → Send pending now** in the dashboard.
 
-The `sent` status means the SMTP server accepted the message, not that an inbox received or opened it. Bounces arrive in the sending mailbox; open tracking is not implemented. The dashboard's Email page shows sent, pending, failed and cancelled counts from the queue. Worker responses contain counts and generic errors, never recipient addresses or provider error bodies. The private outbox stores recipients inside message payloads, so apply the same data retention and access policy as the signup table.
+The `sent` status means a sender accepted the message, not that an inbox received it. Bounces of SMTP mail arrive in the sending mailbox. The dashboard's Email page shows sent, pending, failed and cancelled counts from the queue, plus the engagement below.
+
+## Email analytics
+
+| Measure | How | Coverage |
+| --- | --- | --- |
+| Opens | A 1×1 image at `/api/email/open` with a signed token | Approximate: Apple Mail preloads images and many apps block them |
+| Clicks | The main button goes through `/api/email/click` (signed token, fixed destinations, no open redirect) | Welcome "Share your invite" and priority "Explore Open Swarm". The visible invite link is never wrapped, so friends' visits still count as invites |
+| Email channel | The priority email's Explore link carries `utm_source=waitlist-email&utm_medium=email&utm_campaign=priority` | Those visits appear under the Email channel on the Traffic page |
+| Delivered, bounced, delayed, complaints | Resend webhooks at `/api/email/resend-webhook`, verified with `RESEND_WEBHOOK_SECRET` | Only emails the Resend backup sent |
+| Unsubscribes | Signed unsubscribe link | All emails |
+
+Opens and clicks from bots, link scanners and `HEAD` requests are stored but flagged and left out of rates. Tokens identify the queued email, not the person, and cannot be forged for someone else's email. In Resend, leave its own open and click tracking off so links are not wrapped twice; create a webhook for `email.delivered`, `email.delivery_delayed`, `email.bounced` and `email.complained` pointing at `https://<site>/api/email/resend-webhook`, and put its signing secret in `RESEND_WEBHOOK_SECRET`.
 
 Unsubscribe URLs use an HMAC signature; knowing a public referral code is insufficient to opt someone out. GET shows a confirmation page without changing preferences, so ordinary link scanners cannot unsubscribe a person. POST performs the opt-out and supports the `List-Unsubscribe-Post` one-click header. Pending work is cancelled and workers recheck preferences before sending. An email already handed to the provider may still arrive after an opt-out.
 

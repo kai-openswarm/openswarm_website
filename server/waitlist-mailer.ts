@@ -1,6 +1,7 @@
 import type { Pool } from 'pg'
 import { createDeliveryTransport, type EmailDeliveryConfig } from './email-delivery.ts'
 import { createEmailOutbox, type EmailKind, type EmailPayload } from './email-outbox.ts'
+import { trackingUrls, type TrackedEmail } from './email-tracking.ts'
 import { unsubscribeUrl } from './email-unsubscribe.ts'
 import type { SignupConfig } from './signup-config.ts'
 import { renderWaitlistEmail } from './waitlist-email.ts'
@@ -23,6 +24,8 @@ export function renderWaitlistPayload(
   config: SignupConfig,
   delivery: Pick<EmailDeliveryConfig, 'publicUrl' | 'secret'>,
   subjectPrefix = '',
+  /** Measure opens and button clicks for this email. Previews are not tracked. */
+  track?: TrackedEmail,
 ): EmailPayload {
   const sender = config.welcome_email
   if (!sender.from_email) throw new Error('No sender address is configured.')
@@ -30,6 +33,7 @@ export function renderWaitlistPayload(
   const rendered = renderWaitlistEmail({
     kind, referralCode, publicUrl: delivery.publicUrl, unsubscribeUrl: optOut,
     postalAddress: sender.postal_address || undefined,
+    ...(track ? { tracking: trackingUrls(delivery.publicUrl, track, delivery.secret) } : {}),
   })
   const subject = (kind === 'priority' ? config.priority_email.subject : sender.subject).trim() || rendered.subject
   const name = sender.from_name.replace(/[<>"\r\n]/g, '').trim()
@@ -57,14 +61,16 @@ export function createWaitlistMailer(options: {
     drain: (limit: number) => outbox.drain({
       limit,
       async render(message) {
-        return renderWaitlistPayload(message.kind, message.referralCode, message.email, await options.config(), options.delivery)
+        return renderWaitlistPayload(message.kind, message.referralCode, message.email, await options.config(), options.delivery, '',
+          { kind: message.kind, jobId: message.id, referralCode: message.referralCode })
       },
       send,
     }),
     unsubscribe: (code: string) => outbox.unsubscribe(code),
     /** Sends a test copy to an admin. The config may be unsaved form values. */
     sendTest: (kind: EmailKind, referralCode: string, to: string, config: SignupConfig) =>
-      send(renderWaitlistPayload(kind, referralCode, to, config, options.delivery, '[Test] '), `test/${kind}/${Date.now()}`),
+      send(renderWaitlistPayload(kind, referralCode, to, config, options.delivery, '[Test] ', { kind: 'test', jobId: null, referralCode }),
+        `test/${kind}/${Date.now()}`),
     preview: (kind: EmailKind, referralCode: string, to: string, config: SignupConfig) =>
       renderWaitlistPayload(kind, referralCode, to, config, options.delivery),
   }

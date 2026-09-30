@@ -80,6 +80,7 @@ cp .env.example .env.local
 | `SUPABASE_SERVICE_ROLE_KEY` | Hosted API | Server-only key used by `/api/admin/invite` to create admin logins |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Hosted API | Sends waitlist emails through this SMTP server (port defaults to 587). What is sent is set in the dashboard |
 | `RESEND_API_KEY` | Hosted API | Optional backup sender, used when SMTP definitely did not accept a message; the sender's domain must be verified in Resend |
+| `RESEND_WEBHOOK_SECRET` | Hosted API | Optional; verifies Resend delivery and bounce webhooks |
 | `CRON_SECRET` | Hosted API | Optional; authorizes the daily email retry run from Vercel Cron |
 | `WAITLIST_EMAIL_SECRET`, `WAITLIST_EMAIL_PUBLIC_URL` | Hosted API | Optional overrides for the unsubscribe signing secret and the site URL used in email links |
 | `TURNSTILE_SECRET_KEY` | Hosted API | Optional; when set, signups require a valid Turnstile token |
@@ -101,8 +102,13 @@ For end-to-end local referral checks, open `http://localhost:4310/?ref=<code>` u
 | `GET /api/stats` | None | Public waitlist count (admin-set baseline plus real signups), CDN-cached for 5 minutes |
 | `POST /api/collect` | Analytics batch from the browser tracker | Store page and interaction events; returns 204 |
 | `POST /api/admin/invite` | JSON `email` with an admin's Supabase bearer token | Add an admin and create their login |
-| `POST /api/admin/test-email` | JSON `welcome_email` template with an admin's bearer token | Send the welcome email to the signed-in admin |
-| `GET`/`POST /api/unsubscribe?c=<code>&t=<token>` | Signed link from an email | Confirm, then stop marketing emails for that signup |
+| `POST /api/admin/test-email` | `kind` and the email settings form, with an admin's bearer token | Send a test of the welcome or priority email to the signed-in admin |
+| `POST /api/admin/email-preview` | Same as test-email | Render an email exactly as recipients get it; sends nothing |
+| `POST /api/admin/send-pending` | Admin's bearer token | Send queued waitlist emails now |
+| `GET /api/waitlist/unsubscribe?token=…` | Signed link from an email | Confirm, then (POST) stop waitlist emails |
+| `GET`/`POST /api/waitlist/email-worker` | `Authorization: Bearer <CRON_SECRET>` | Retry queued emails (daily Vercel Cron) |
+| `GET /api/email/open`, `GET /api/email/click` | Signed token from an email | Record an email open or button click; see [email analytics](docs/waitlist-email-flow.md#email-analytics) |
+| `POST /api/email/resend-webhook` | Resend webhook, Svix-signed | Record delivered, bounced, delayed and complaint events |
 
 The form and API trim outer spaces and lowercase accepted email addresses. Dots and plus tags remain intact; provider-specific aliases are not merged. A new signup returns HTTP 201; an existing email returns HTTP 200 without changing its original referral attribution. Success responses contain referral metadata, never email addresses or phone numbers. Phone-only signup requests are no longer accepted.
 

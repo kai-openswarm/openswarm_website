@@ -6,6 +6,26 @@ export type WaitlistEmailOptions = {
   publicUrl: string
   unsubscribeUrl: string
   postalAddress?: string
+  /** Measured links: the action button goes through `action`, and `pixel` records an open. The invite link is never wrapped. */
+  tracking?: { action: string, pixel: string }
+}
+
+/** Where the priority email's button leads, tagged so those visits appear as the Email channel. */
+export function exploreUrl(publicUrl: string) {
+  const url = new URL(publicUrl)
+  url.search = ''
+  url.pathname = url.pathname.endsWith('/') ? url.pathname : `${url.pathname}/`
+  url.searchParams.set('utm_source', 'waitlist-email')
+  url.searchParams.set('utm_medium', 'email')
+  url.searchParams.set('utm_campaign', 'priority')
+  url.hash = 'product'
+  return url.href
+}
+
+/** The welcome email's "Share your invite" draft. */
+export function shareMailto(inviteUrl: string) {
+  const message = `I joined the Open Swarm waitlist, an AI desktop where agents work together. Thought you might like it too.\n\nJoin me: ${inviteUrl}`
+  return `mailto:?subject=${encodeURIComponent('Join me on Open Swarm')}&body=${encodeURIComponent(message)}`
 }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
@@ -30,7 +50,7 @@ export function renderWaitlistEmail(options: WaitlistEmailOptions): { subject: s
   if (unsubscribe.origin !== site.origin) throw new Error('Unsubscribe must use the configured site origin.')
   const invite = new URL(site)
   invite.searchParams.set('ref', options.referralCode)
-  const product = new URL('#product', site).href
+  const product = exploreUrl(site.href)
   const logo = new URL('media/logo-256.png', site).href
   const artwork = new URL('media/email/invitations.jpg', site).href
   const priority = options.kind === 'priority'
@@ -44,8 +64,7 @@ export function renderWaitlistEmail(options: WaitlistEmailOptions): { subject: s
     ? 'Thanks for bringing good people along. We’ll email you when your invitation is ready.'
     : 'We’re building one desktop for your agents, your apps, and the things you want to get done.'
   const referral = 'Know someone who’d like Open Swarm? When 3 friends join through your link, you’ll unlock priority early access.'
-  const shareMessage = `I joined the Open Swarm waitlist, an AI desktop where agents work together. Thought you might like it too.\n\nJoin me: ${invite.href}`
-  const action = priority ? product : `mailto:?subject=${encodeURIComponent('Join me on Open Swarm')}&body=${encodeURIComponent(shareMessage)}`
+  const action = options.tracking?.action ?? (priority ? product : shareMailto(invite.href))
   const actionLabel = priority ? 'Explore Open Swarm' : 'Share your invite'
   const font = "'Helvetica Neue','Segoe UI',Helvetica,Arial,sans-serif"
   const button = `<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td class="button-cell" bgcolor="#292b27" style="background-color:#292b27;border-radius:6px;text-align:center;"><a class="button" href="${escapeHtml(action)}" style="display:inline-block;border:12px solid #292b27;border-left-width:20px;border-right-width:20px;border-radius:6px;background-color:#292b27;color:#ffffff;font-family:${font};font-size:14px;line-height:20px;font-weight:500;letter-spacing:0.01em;text-decoration:none;text-align:center;mso-padding-alt:0;">${actionLabel}<span aria-hidden="true"> &nbsp;↗</span></a></td></tr></table>`
@@ -90,6 +109,7 @@ You’re receiving this because you joined the Open Swarm waitlist.<br>
 </td></tr></table>
 <!--[if mso]></td></tr></table><![endif]-->
 </td></tr></table>
+${options.tracking ? `<img src="${escapeHtml(options.tracking.pixel)}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;border:0;">` : ''}
 </body></html>`
   const text = priority
     ? `OPEN SWARM\n\nYou’ve unlocked priority early access.\n\n${opening}\n\n${next}\n\nYour place on the waitlist is still saved. Access arrives in a separate invitation.\n\nExplore Open Swarm: ${product}`

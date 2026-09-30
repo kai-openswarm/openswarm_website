@@ -6,7 +6,7 @@ import { getSupabase } from './supabase'
 import type {
   AdminSettings, Annotation, Bucket, BreakdownRow, Dimension, EmailReport, Engagement, ExportRow, Funnel, NewAnnotation, Overview,
   Performance, Range, RangeQuery, Realtime, Referrals, SettingKey, SettingValues, SignupsPage, TimeseriesPoint, WelcomeEmail, Whoami,
-  EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult,
+  EmailEngagement, EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult,
 } from './types'
 
 export interface AdminApi {
@@ -44,6 +44,7 @@ export interface AdminApi {
   addAnnotation(a: NewAnnotation): Promise<number>
   deleteAnnotation(id: number): Promise<void>
   emailReport(r: Range): Promise<EmailReport>
+  emailEngagement(r: Range): Promise<EmailEngagement>
 }
 
 export class ApiError extends Error {
@@ -122,6 +123,7 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     addAnnotation: (a) => rpc('admin_add_annotation', { p_starts_on: a.starts_on, p_ends_on: a.ends_on, p_title: a.title, p_color: a.color }),
     deleteAnnotation: (id) => rpc('admin_delete_annotation', { p_id: id }),
     emailReport: (r) => rpc('admin_email_report', { p_from: r.from, p_to: r.to }),
+    emailEngagement: (r) => rpc('admin_email_engagement', { p_from: r.from, p_to: r.to }),
   }
 }
 

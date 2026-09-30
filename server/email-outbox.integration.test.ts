@@ -67,7 +67,7 @@ test('real PostgreSQL: atomic queue events, durable retries, fencing and suppres
   // after expiry; a delayed old worker cannot overwrite the new lease/result.
   const pending = (await query("SELECT * FROM waitlist_email_outbox WHERE status = 'pending' LIMIT 1")).rows[0]
   const signup = (await query('SELECT email FROM waitlist_signups WHERE referral_code = $1', [pending.referral_code])).rows[0]
-  const staleBody = JSON.stringify(render({ email: signup.email, kind: pending.kind, referralCode: pending.referral_code, createdAt: '' }))
+  const staleBody = JSON.stringify(render({ id: pending.id, email: signup.email, kind: pending.kind, referralCode: pending.referral_code, createdAt: '' }))
   const staleLease = '11111111-1111-4111-8111-111111111111'
   await query(`UPDATE waitlist_email_outbox SET status = 'processing', lease_token = $2,
     lease_expires_at = now() - interval '1 second', payload = $3, payload_hash = $4,
