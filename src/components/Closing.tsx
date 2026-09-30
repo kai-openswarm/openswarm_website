@@ -54,9 +54,9 @@ export function Closing() {
         <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,rgba(12,38,67,0.6),transparent)]" />
         <div className="relative z-10 grid gap-6 px-6 pb-8 pt-8 sm:px-10 sm:pt-10 lg:w-[86%] lg:grid-cols-[200px_1fr] lg:gap-10">
           <div>
-            <a href="#top" className="inline-flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#366e88]" aria-label="Open Swarm home">
+            <a href="#top" className="inline-flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#366e88]" aria-label="OpenSwarm home">
               <img src={media('logo-256.png')} alt="" width="28" height="28" className="h-7 w-7 [image-rendering:pixelated]" />
-              <span className="text-[17px] font-semibold tracking-[-0.02em] text-[#26384a]">Open Swarm</span>
+              <span className="text-[17px] font-semibold tracking-[-0.02em] text-[#26384a]">OpenSwarm</span>
             </a>
             <p className="mt-3 max-w-[270px] text-[14px] leading-[1.6] text-[#3e5061]">Your AI desktop. One place for you and your agents to work together.</p>
             <div className="mt-3 flex gap-2">
@@ -76,7 +76,7 @@ export function Closing() {
         </div>
 
         <div className="relative z-10 mx-6 mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-white/25 py-3 text-[11px] text-white/90 sm:mx-10">
-          <span>© 2026 Open Swarm.</span>
+          <span>© 2026 Open Swarm Inc.</span>
           <motion.a
             href="#top"
             initial={reduce ? false : { opacity: 0, y: 5 }}

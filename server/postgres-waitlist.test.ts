@@ -210,7 +210,7 @@ test('real PostgreSQL migration, concurrent dedupe and first-referral attributio
     const firstPairStarted = new Promise<void>((resolve) => { releaseFirstPair = resolve })
     const worker = {
       limit: 5,
-      render: ({ email }: { email: string }) => ({ from: 'Open Swarm <hello@example.com>', to: [email], subject: 'Test', html: '<p>Test</p>', text: 'Test' }),
+      render: ({ email }: { email: string }) => ({ from: 'OpenSwarm <hello@example.com>', to: [email], subject: 'Test', html: '<p>Test</p>', text: 'Test' }),
       send: async (_payload: unknown, key: string) => {
         deliveredKeys.push(key)
         if (deliveredKeys.length === 2) releaseFirstPair()

@@ -607,18 +607,18 @@ function previewHtml(kind: EmailKind, w: WelcomeEmail) {
   const link = 'https://openswarm.com/?ref=EXAMPLE-INVITE-CODE'
   const head = kind === 'priority' ? 'You’ve unlocked priority access' : 'You’re on the list'
   const lead = kind === 'priority'
-    ? 'Three friends joined with your link, so you’ll be among the first to get Open Swarm.'
-    : 'Thanks for joining the Open Swarm waitlist. We’ll email you when early access opens.'
+    ? 'Three friends joined with your link, so you’ll be among the first to get OpenSwarm.'
+    : 'Thanks for joining the OpenSwarm waitlist. We’ll email you when early access opens.'
   const extra = kind === 'priority' ? '' : `<p style="margin:0 0 16px">Want to move up? Invite 3 friends and unlock priority access.</p>
     <p style="margin:0 0 24px"><a href="${link}" style="display:inline-block;background:#0a0a0a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:600">Share your invite link</a></p>`
   return `<!doctype html><html><body style="margin:0;background:#f4f4f2;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#0a0a0a">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
   <table role="presentation" width="100%" style="max-width:520px;background:#fff;border-radius:16px;padding:32px"><tr><td>
-    <p style="margin:0 0 24px;font-size:18px;font-weight:800">🐙 Open Swarm</p>
+    <p style="margin:0 0 24px;font-size:18px;font-weight:800">🐙 OpenSwarm</p>
     <h1 style="margin:0 0 12px;font-size:24px;letter-spacing:-0.02em">${head}</h1>
     <p style="margin:0 0 16px;line-height:1.5;color:#444">${lead}</p>
     ${extra}
-    <p style="margin:0;color:#444">The Open Swarm team</p>
+    <p style="margin:0;color:#444">The OpenSwarm team</p>
   </td></tr></table>
   <p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#888;line-height:1.5">Don’t want these emails? <a href="#" style="color:#888">Unsubscribe</a>.<br>${esc(w.postal_address || '(postal address not set)')}</p>
   <p style="font-size:11px;color:#aaa">Mock preview. The real template is rendered by the server.</p>
@@ -627,9 +627,9 @@ function previewHtml(kind: EmailKind, w: WelcomeEmail) {
 
 function previewText(kind: EmailKind, w: WelcomeEmail) {
   const body = kind === 'priority'
-    ? 'Three friends joined with your link, so you’ll be among the first to get Open Swarm.'
-    : 'Thanks for joining the Open Swarm waitlist. We’ll email you when early access opens.\n\nWant to move up? Invite 3 friends and unlock priority access:\nhttps://openswarm.com/?ref=EXAMPLE-INVITE-CODE'
-  return `${body}\n\nThe Open Swarm team\n\n--\nUnsubscribe: https://openswarm.com/api/unsubscribe?...\n${w.postal_address || '(postal address not set)'}`
+    ? 'Three friends joined with your link, so you’ll be among the first to get OpenSwarm.'
+    : 'Thanks for joining the OpenSwarm waitlist. We’ll email you when early access opens.\n\nWant to move up? Invite 3 friends and unlock priority access:\nhttps://openswarm.com/?ref=EXAMPLE-INVITE-CODE'
+  return `${body}\n\nThe OpenSwarm team\n\n--\nUnsubscribe: https://openswarm.com/api/unsubscribe?...\n${w.postal_address || '(postal address not set)'}`
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -648,11 +648,11 @@ export function createMockApi(): AdminApi {
     priority_email: { enabled: false, subject: 'You’ve unlocked priority early access' },
     welcome_email: {
       enabled: false,
-      from_name: 'Open Swarm',
+      from_name: 'OpenSwarm',
       from_email: '',
       reply_to: '',
-      subject: 'You’re on the Open Swarm waitlist',
-      body: 'Thanks for joining the Open Swarm waitlist. We’ll email you when early access opens.\n\nWant to move up? Invite 3 friends with your personal link and unlock priority access:\n{{invite_link}}\n\nThe Open Swarm team',
+      subject: 'You’re on the OpenSwarm waitlist',
+      body: 'Thanks for joining the OpenSwarm waitlist. We’ll email you when early access opens.\n\nWant to move up? Invite 3 friends with your personal link and unlock priority access:\n{{invite_link}}\n\nThe OpenSwarm team',
       postal_address: '',
     },
   }
@@ -1173,7 +1173,7 @@ export function createMockApi(): AdminApi {
     }, 900),
 
     emailPreview: (kind, w, p) => delay((): EmailPreview => {
-      const from = `${w.from_name || 'Open Swarm'} <${w.from_email || 'sender@example.com'}>`
+      const from = `${w.from_name || 'OpenSwarm'} <${w.from_email || 'sender@example.com'}>`
       const subject = kind === 'priority' ? p.subject : w.subject
       return { kind, from, subject, html: previewHtml(kind, w), text: previewText(kind, w) }
     }, 250),

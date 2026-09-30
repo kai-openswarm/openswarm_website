@@ -54,7 +54,7 @@ export function Shell({ email, mock, onSignOut }: { email: string; mock: boolean
   const shownPage = useRef(def.id)
 
   useEffect(() => {
-    document.title = `${def.label} · Open Swarm Admin`
+    document.title = `${def.label} · OpenSwarm Admin`
     if (shownPage.current === def.id) return
     shownPage.current = def.id
     // Move focus to the new page's heading for keyboard and screen reader users.
@@ -113,7 +113,7 @@ export function Shell({ email, mock, onSignOut }: { email: string; mock: boolean
       <aside className="sticky top-0 hidden h-svh w-[224px] shrink-0 flex-col border-r border-line bg-panel lg:flex">
         <div className="flex h-14 items-center gap-2 px-4">
           <img src="../favicon.png" alt="" className="size-6 rounded" />
-          <span className="text-[14px] font-semibold">Open Swarm</span>
+          <span className="text-[14px] font-semibold">OpenSwarm</span>
           <span className="text-[13px] text-ink-3">Admin</span>
         </div>
         <nav aria-label="Dashboard" className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-2">
@@ -133,7 +133,7 @@ export function Shell({ email, mock, onSignOut }: { email: string; mock: boolean
         <div className="flex h-12 items-center justify-between gap-2 px-4">
           <div className="flex min-w-0 items-center gap-2">
             <img src="../favicon.png" alt="" className="size-5 rounded" />
-            <span className="truncate text-[14px] font-semibold">Open Swarm Admin</span>
+            <span className="truncate text-[14px] font-semibold">OpenSwarm Admin</span>
             {mock && <span className="rounded bg-accent-soft px-1.5 py-px text-[11px] font-medium text-accent">Mock</span>}
           </div>
           <button type="button" onClick={onSignOut} className="flex h-8 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-2 hover:bg-hover" aria-label={`Sign out ${email}`}>

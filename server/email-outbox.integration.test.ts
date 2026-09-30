@@ -13,7 +13,7 @@ test('real PostgreSQL: atomic queue events, durable retries, fencing and suppres
   const pg = { exec: (sql: string) => pool.query(sql) }
   const query = (sql: string, values?: unknown[]) => pool.query(sql, values)
   const database = pool as Pick<Pool, 'query' | 'connect'>
-  const render = ({ email, kind }: EmailMessage): EmailPayload => ({ from: 'Open Swarm <hello@example.com>', to: [email], subject: kind, html: '<p>You’re in.</p>', text: 'You’re in.' })
+  const render = ({ email, kind }: EmailMessage): EmailPayload => ({ from: 'OpenSwarm <hello@example.com>', to: [email], subject: kind, html: '<p>You’re in.</p>', text: 'You’re in.' })
   await applyFiles(pool, [...BASE_MIGRATIONS, '../sql/002_email_waitlist.sql', '../sql/003_analytics.sql', '../sql/004_api_role.sql', '../sql/005_admin_features.sql'])
   const disabled = createPostgresWaitlistStore(database)
   const historical = await disabled.add('historical@example.com', 'test')

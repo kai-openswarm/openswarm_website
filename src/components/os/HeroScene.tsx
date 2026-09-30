@@ -124,7 +124,7 @@ const IC = {
 const ASKS = [
   { text: 'Catch me up on my texts and LinkedIn', in: 0.25, type: [0.5, 1.35], done: 1.45, out: 1.65 },
   { text: 'Post the hotkeys videos on X', in: 2.9, type: [3.1, 3.7], done: 3.8, out: 3.95 },
-  { text: 'Find one competitor that rivals Open Swarm', in: 4.95, type: [5.15, 5.95], done: 6.05, out: 6.2 },
+  { text: 'Find one competitor that rivals OpenSwarm', in: 4.95, type: [5.15, 5.95], done: 6.05, out: 6.2 },
 ]
 
 function Voice({ t }: { t: number }) {
@@ -181,7 +181,7 @@ const C2: Item[] = [
 ]
 
 const C3: Item[] = [
-  { k: 'prompt', at: 6.5, lines: ['Find one competitor that', 'rivals Open Swarm'] },
+  { k: 'prompt', at: 6.5, lines: ['Find one competitor that', 'rivals OpenSwarm'] },
   { k: 'step', at: 6.85, done: 7.3, icon: IC.globe, active: 'Opening', verb: 'Opened', file: 'google.com', ms: '0.5s' },
   { k: 'custom', at: 7.1, h: 216, id: 'browser' },
   { k: 'custom', at: 8.7, h: 58, id: 'reason' },
@@ -392,7 +392,7 @@ function Thumbs({ t }: { t: number }) {
 }
 
 const RESULTS = [
-  { brand: B.reddit, site: 'reddit.com', title: 'Any good Open Swarm alternatives?' },
+  { brand: B.reddit, site: 'reddit.com', title: 'Any good OpenSwarm alternatives?' },
   { brand: B.github, site: 'github.com', title: 'awesome-agents: desktop apps' },
   { brand: B.medium, site: 'medium.com', title: 'Five AI desktops, compared' },
 ]
@@ -441,7 +441,7 @@ function Reason({ t }: { t: number }) {
     <div>
       <div className="flex h-[20px] items-center gap-[8px] whitespace-nowrap text-[13.5px] font-medium text-[#eee8ee]">
         <Glyph d={IC.sparkle} size={15} className="text-[#b085f5]" />
-        Finding a rival to Open Swarm
+        Finding a rival to OpenSwarm
         <Glyph d={IC.chevron} size={13} className="text-[#8e848e]" />
       </div>
       <div className="relative ml-[7px] mt-[6px] h-[20px] border-l-2 border-white/10 text-[13px] leading-[20px]">
@@ -715,7 +715,7 @@ export function HeroScene() {
   const gridHover = inOut(t, 10.3, 11.0, 0.2)
 
   return (
-    <Stage w={W} h={H} view={view} stageRef={ref} width={cw} label="The Open Swarm desktop: three spoken requests start three AI agents that work side by side, then the app launcher opens a Daily Brief app.">
+    <Stage w={W} h={H} view={view} stageRef={ref} width={cw} label="The OpenSwarm desktop: three spoken requests start three AI agents that work side by side, then the app launcher opens a Daily Brief app.">
       <Desktop>
         {out > 0 && (
           <div className="absolute inset-0" style={{ opacity: out, transform: `scale(${0.99 + 0.01 * out})` }}>

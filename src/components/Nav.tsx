@@ -31,7 +31,7 @@ const MENUS: Menu[] = [
       { label: 'Browser agents', desc: 'An agent in every browser tab', href: '#browser-agents', glyph: G.browser },
       { label: 'App builder', desc: 'Describe a tool, get an app', href: '#app-builder', glyph: G.apps },
       { label: 'Agent swarms', desc: 'Multiple agents on one job', href: '#agent-swarms', glyph: G.people },
-      { label: 'The desktop', desc: 'See Open Swarm in action', href: '#product', glyph: G.book },
+      { label: 'The desktop', desc: 'See OpenSwarm in action', href: '#product', glyph: G.book },
     ],
   },
   {
@@ -50,7 +50,7 @@ const MENUS: Menu[] = [
     label: 'Resources',
     items: [
       { label: 'Community', desc: 'Talk to the team on Discord', href: LINKS.discord, glyph: G.people, external: true },
-      { label: 'Updates', desc: 'Follow Open Swarm on X', href: LINKS.x, glyph: G.x, external: true },
+      { label: 'Updates', desc: 'Follow OpenSwarm on X', href: LINKS.x, glyph: G.x, external: true },
     ],
   },
 ]
@@ -247,9 +247,9 @@ export function Nav() {
           )}
         >
           <nav className="flex h-14 items-center justify-between pl-4 pr-2.5 sm:pl-5" aria-label="Main">
-            <a href="#top" onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) closeMobile() }} className="flex shrink-0 items-center gap-2" aria-label="Open Swarm home">
+            <a href="#top" onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) closeMobile() }} className="flex shrink-0 items-center gap-2" aria-label="OpenSwarm home">
               <img src={media('logo-256.png')} alt="" className="h-7 w-7 [image-rendering:pixelated]" />
-              <span className="text-[15px] font-semibold tracking-[-0.02em] text-ink min-[360px]:text-[17px]">Open Swarm</span>
+              <span className="text-[15px] font-semibold tracking-[-0.02em] text-ink min-[360px]:text-[17px]">OpenSwarm</span>
             </a>
 
             <ul className="absolute left-1/2 hidden w-max -translate-x-1/2 items-center whitespace-nowrap md:flex">

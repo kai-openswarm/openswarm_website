@@ -174,7 +174,7 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
           </div>
         </motion.div>
       ) : (
-        <form onSubmit={submit} noValidate aria-label="Join the Open Swarm waitlist" aria-busy={status === 'submitting'} className="group/form grid h-11 grid-cols-[minmax(0,1fr)_auto] gap-2.5">
+        <form onSubmit={submit} noValidate aria-label="Join the OpenSwarm waitlist" aria-busy={status === 'submitting'} className="group/form grid h-11 grid-cols-[minmax(0,1fr)_auto] gap-2.5">
           <label htmlFor={id} className="sr-only">Email address</label>
             <LiquidGlassInput
               ref={input}

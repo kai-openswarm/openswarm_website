@@ -67,7 +67,7 @@ test('clicks are recorded, then explore redirects with campaign tags and share o
   const welcome = trackingUrls('https://openswarm.com', { kind: 'test', jobId: null, referralCode: CODE }, SECRET).action
   const share = await fetch(welcome.replace('https://openswarm.com', origin), { headers: { 'User-Agent': BROWSER } })
   const page = await share.text()
-  assert.ok(page.includes('mailto:?subject=Join%20me%20on%20Open%20Swarm'))
+  assert.ok(page.includes('mailto:?subject=Join%20me%20on%20OpenSwarm'))
   assert.ok(page.includes(`https://openswarm.com/?ref=${CODE}`))
   const bad = await fetch(`${origin}/api/email/click?t=bad&l=explore`, { redirect: 'manual' })
   assert.equal(bad.headers.get('location'), 'https://openswarm.com/', 'no open redirect')

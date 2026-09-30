@@ -31,7 +31,7 @@ function escapeHtml(value: string) {
 }
 
 function page(title: string, message: string, token?: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · Open Swarm</title><style>body{margin:0;background:#f3f5f8;color:#202836;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:440px;margin:12vh auto;padding:36px;background:#fff;border:1px solid #e1e5eb;border-radius:24px;box-shadow:0 18px 60px #2739510d}p{font-size:16px;line-height:1.6;color:#566173}h1{font-size:30px;letter-spacing:-1px;font-weight:600}small{color:#617085}button{appearance:none;background:#202b41;color:white;border:0;border-radius:12px;padding:15px 20px;font:inherit;cursor:pointer}button:focus-visible{outline:3px solid #5881e6;outline-offset:4px}@media(max-width:540px){main{margin:48px 16px;padding:28px}}</style></head><body><main><small>OPEN SWARM</small><h1>${title}</h1><p>${message}</p>${token ? `<form method="post"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit">Unsubscribe from emails</button></form>` : ''}</main></body></html>`
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · OpenSwarm</title><style>body{margin:0;background:#f3f5f8;color:#202836;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:440px;margin:12vh auto;padding:36px;background:#fff;border:1px solid #e1e5eb;border-radius:24px;box-shadow:0 18px 60px #2739510d}p{font-size:16px;line-height:1.6;color:#566173}h1{font-size:30px;letter-spacing:-1px;font-weight:600}small{color:#617085}button{appearance:none;background:#202b41;color:white;border:0;border-radius:12px;padding:15px 20px;font:inherit;cursor:pointer}button:focus-visible{outline:3px solid #5881e6;outline-offset:4px}@media(max-width:540px){main{margin:48px 16px;padding:28px}}</style></head><body><main><small>OPENSWARM</small><h1>${title}</h1><p>${message}</p>${token ? `<form method="post"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit">Unsubscribe from emails</button></form>` : ''}</main></body></html>`
 }
 
 function send(response: ServerResponse, status: number, html: string) {
@@ -53,7 +53,7 @@ export function createUnsubscribeHandler(options: { secret: string, unsubscribe:
     }
     let url: URL
     try { url = new URL(request.url ?? '', 'https://waitlist.invalid') } catch {
-      send(response, 400, page('This link is invalid', 'Use the unsubscribe link from your Open Swarm email.'))
+      send(response, 400, page('This link is invalid', 'Use the unsubscribe link from your OpenSwarm email.'))
       return
     }
     // The signed token stays in the URL for browser forms and RFC8058 one-click POSTs.
@@ -61,16 +61,16 @@ export function createUnsubscribeHandler(options: { secret: string, unsubscribe:
     const token = url.searchParams.get('token') ?? ''
     const code = verifyUnsubscribeToken(token, options.secret)
     if (!code) {
-      send(response, 400, page('This link is invalid', 'Use the unsubscribe link from your Open Swarm email.'))
+      send(response, 400, page('This link is invalid', 'Use the unsubscribe link from your OpenSwarm email.'))
       return
     }
     if (request.method === 'GET') {
-      send(response, 200, page('Fewer emails?', 'You can stop Open Swarm waitlist emails here. Your waitlist place and referral progress will be kept.', token))
+      send(response, 200, page('Fewer emails?', 'You can stop OpenSwarm waitlist emails here. Your waitlist place and referral progress will be kept.', token))
       return
     }
     try {
       await options.unsubscribe(code)
-      send(response, 200, page('You’re unsubscribed.', 'Open Swarm waitlist emails have been turned off. Your waitlist place and referral progress are still saved.'))
+      send(response, 200, page('You’re unsubscribed.', 'OpenSwarm waitlist emails have been turned off. Your waitlist place and referral progress are still saved.'))
     } catch {
       send(response, 503, page('Please try again', 'We couldn’t update your email preference. Please try this link again shortly.', token))
     }

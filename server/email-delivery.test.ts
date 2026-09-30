@@ -9,7 +9,7 @@ const valid: NodeJS.ProcessEnv = {
   VERCEL_PROJECT_PRODUCTION_URL: 'openswarmwebsite.vercel.app',
 }
 const payload: EmailPayload = {
-  from: 'Open Swarm <noreply@example.com>', to: ['recipient@example.com'],
+  from: 'OpenSwarm <noreply@example.com>', to: ['recipient@example.com'],
   subject: 'You’re on the list.', html: '<p>Welcome.</p>', text: 'Welcome.',
   reply_to: 'team@example.com', headers: { 'List-Unsubscribe': '<https://example.com/unsubscribe>' },
 }
@@ -42,7 +42,7 @@ test('SMTP receives the exact payload with the sender split into name and addres
     close() { closed++ },
   }))
   assert.deepEqual(await send(payload), { id: '<id@example.com>' })
-  assert.deepEqual(sent[0].from, { name: 'Open Swarm', address: 'noreply@example.com' })
+  assert.deepEqual(sent[0].from, { name: 'OpenSwarm', address: 'noreply@example.com' })
   assert.deepEqual(sent[0].to, ['recipient@example.com'])
   assert.equal(sent[0].replyTo, 'team@example.com')
   assert.equal(sent[0].html, '<p>Welcome.</p>')

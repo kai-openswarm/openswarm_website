@@ -11,7 +11,7 @@ import { GradientText } from './ui/gradient-text'
 
 /*
   Agent Marketplace. Names and first four lines come from the team's Marketplace
-  clips in the Open Swarm v2 Drive. Text, Call and Verbal Hotkeys lines are drafts.
+  clips in the OpenSwarm v2 Drive. Text, Call and Verbal Hotkeys lines are drafts.
   Problem Validator's agents and sources match its swarm in the Capabilities card
   (one agent per source), so the two agree; the team should confirm the count.
 */
@@ -100,7 +100,7 @@ export function Marketplace() {
   return (
     <section id="marketplace" data-section="marketplace" className="relative">
       <div className="bg-bg-alt px-5 py-20 sm:px-8 sm:py-28 lg:mx-auto lg:w-[calc(100%-64px)] lg:max-w-[1240px]">
-        <SectionHeading title={<GradientText className="gradient-text--swarm">Agent marketplace</GradientText>} sub="Apps your agents use inside Open Swarm to find leads, validate problems and more." />
+        <SectionHeading title={<GradientText className="gradient-text--swarm">Agent marketplace</GradientText>} sub="Apps your agents use inside OpenSwarm to find leads, validate problems and more." />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {live.map((a, i) => (
             <MarketplaceAppCard key={a.name} a={a} i={i} />

@@ -57,7 +57,7 @@ export function Hero() {
               aria-hidden
               className="pointer-events-none absolute -top-[31px] right-[6%] z-10 h-10 w-10 [image-rendering:pixelated] sm:-top-[43px] sm:h-[56px] sm:w-[56px]"
             />
-            <Window title="Open Swarm" className="ring-1 ring-[#233f56]/20">
+            <Window title="OpenSwarm" className="ring-1 ring-[#233f56]/20">
               <HeroScene />
             </Window>
           </div>

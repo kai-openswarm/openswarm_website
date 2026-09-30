@@ -23,7 +23,7 @@ function render(message = '') {
 
 optOut?.addEventListener('click', () => {
   try { localStorage.setItem(AD_OPT_OUT_KEY, '1') } catch { /* Blocked storage already prevents the pixel from being remembered. */ }
-  render('Done. Advertising tracking and session recordings are off in this browser. Reload any open Open Swarm pages to apply it.')
+  render('Done. Advertising tracking and session recordings are off in this browser. Reload any open OpenSwarm pages to apply it.')
 })
 optIn?.addEventListener('click', () => {
   try { localStorage.removeItem(AD_OPT_OUT_KEY) } catch { /* Nothing to undo. */ }

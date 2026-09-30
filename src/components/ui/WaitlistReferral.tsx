@@ -133,7 +133,7 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
 
   async function shareLink() {
     try {
-      await navigator.share({ title: 'Everyone gets a Jarvis now.', text: 'Join me on the free Open Swarm waitlist. Your free AI desktop for Mac.', url: link })
+      await navigator.share({ title: 'Everyone gets a Jarvis now.', text: 'Join me on the free OpenSwarm waitlist. Your free AI desktop for Mac.', url: link })
       track('referral_share', { channel: 'native' })
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return
@@ -147,13 +147,13 @@ export function WaitlistReferralDialog({ initialReferral, justJoined, onClose, o
         <div className="waitlist-referral-art" aria-hidden><img src={media('footer-cobalt-coast.webp')} alt="" width="1612" height="976" /></div>
         <button type="button" className="waitlist-referral-close" aria-label="Close invitation" onClick={onClose}><X size={18} strokeWidth={1.6} aria-hidden /></button>
         <div className="waitlist-referral-header">
-          <div className="waitlist-referral-brand"><img src={media('logo-256.png')} alt="" width="21" height="21" aria-hidden /><span>Open Swarm</span></div>
+          <div className="waitlist-referral-brand"><img src={media('logo-256.png')} alt="" width="21" height="21" aria-hidden /><span>OpenSwarm</span></div>
           <h2 id={titleId} ref={heading} tabIndex={-1}>{referral?.priorityAccess ? 'Priority access unlocked.' : justJoined && !invalidCode ? 'You’re on the list.' : 'Invite friends. Get early access.'}</h2>
         </div>
         <div className="waitlist-referral-body">
         <p id={descriptionId} className="waitlist-referral-description">
           {justJoined && !invalidCode && <span className="waitlist-referral-next-step">We’ll email you when early access opens.</span>}
-          {referral?.priorityAccess ? 'Three friends joined through your link. You’ve unlocked priority early access.' : 'Invite 3 friends who join the waitlist to unlock priority early access. Open Swarm is 100% free.'}
+          {referral?.priorityAccess ? 'Three friends joined through your link. You’ve unlocked priority early access.' : 'Invite 3 friends who join the waitlist to unlock priority early access. OpenSwarm is 100% free.'}
         </p>
 
         {loading ? <div className="waitlist-referral-loading" role="status"><LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden /> Getting your invite link…</div> : referral ? (

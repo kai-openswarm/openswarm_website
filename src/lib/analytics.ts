@@ -1,6 +1,6 @@
 /*
   First-party website analytics. Events go only to this site's /api/collect endpoint
-  and are stored in the Open Swarm database; nothing here is shared with ad networks.
+  and are stored in the OpenSwarm database; nothing here is shared with ad networks.
   The visitor id is a random value in this browser's storage. No email addresses,
   form contents or query strings are ever sent.
 */
