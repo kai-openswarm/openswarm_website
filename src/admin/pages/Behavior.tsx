@@ -1,7 +1,7 @@
 import { useApi, useQuery, useView } from '../hooks'
 import { SECTION_LABELS, eventName, fmtInt, fmtPct } from '../format'
 import type { Engagement } from '../types'
-import { DataTable, EmptyState, Panel, QueryView, RankedList, SkeletonRows } from '../ui'
+import { CsvButton, DataTable, EmptyState, Panel, QueryView, RankedList, SkeletonRows } from '../ui'
 
 function RateBars({ rows }: { rows: { key: string; label: string; sessions: number; rate: number }[] }) {
   return (
@@ -38,14 +38,14 @@ export function Behavior() {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Section reach" subtitle="Share of sessions that scrolled each section into view">
+        <Panel title="Section reach" subtitle="Share of sessions that scrolled each section into view" actions={q.data && <CsvButton name="section reach" getRows={() => ({ header: ['Section', 'Sessions', 'Rate'], rows: (q.data?.sections ?? []).map((x) => [SECTION_LABELS[x.section] ?? x.section, x.sessions, x.rate]) })} />}>
           <QueryView q={q} isEmpty={noSessions} skeleton={<SkeletonRows rows={6} />}>
             {(d) => (
               <RateBars rows={[...d.sections].sort((a, b) => a.ord - b.ord).map((s) => ({ key: s.section, label: SECTION_LABELS[s.section] ?? s.section, sessions: s.sessions, rate: s.rate }))} />
             )}
           </QueryView>
         </Panel>
-        <Panel title="Scroll depth" subtitle="Share of sessions that scrolled at least this far">
+        <Panel title="Scroll depth" subtitle="Share of sessions that scrolled at least this far" actions={q.data && <CsvButton name="scroll depth" getRows={() => ({ header: ['Depth %', 'Sessions', 'Rate'], rows: (q.data?.scroll ?? []).map((x) => [x.depth, x.sessions, x.rate]) })} />}>
           <QueryView q={q} isEmpty={noSessions} skeleton={<SkeletonRows rows={5} />}>
             {(d) => <RateBars rows={d.scroll.map((s) => ({ key: String(s.depth), label: `${s.depth}%`, sessions: s.sessions, rate: s.rate }))} />}
           </QueryView>
@@ -56,14 +56,14 @@ export function Behavior() {
         <Panel title="Use-case tabs" subtitle="Tabs opened, by group">
           <QueryView q={q} isEmpty={(d) => d.tabs.length === 0} skeleton={<SkeletonRows />}>
             {(d) => (
-              <RankedList valueLabel="Opens" items={d.tabs.map((t) => ({ key: t.tab, label: t.tab, title: t.tab, value: t.count, display: <>{fmtInt(t.count)} <span className="text-ink-3">· {fmtInt(t.sessions)} sess.</span></> }))} />
+              <RankedList valueLabel="Opens" csv={{ name: 'use-case tabs', nameHeader: 'Tab' }} items={d.tabs.map((t) => ({ key: t.tab, label: t.tab, title: t.tab, value: t.count, display: <>{fmtInt(t.count)} <span className="text-ink-3">· {fmtInt(t.sessions)} sess.</span></> }))} />
             )}
           </QueryView>
         </Panel>
         <Panel title="Top clicks" subtitle="Tracked buttons and links">
           <QueryView q={q} isEmpty={(d) => d.clicks.length === 0} skeleton={<SkeletonRows />}>
             {(d) => (
-              <RankedList limit={12} valueLabel="Clicks" items={d.clicks.map((c) => ({ key: c.target, label: c.target, title: c.target, value: c.count, display: <>{fmtInt(c.count)} <span className="text-ink-3">· {fmtInt(c.sessions)} sess.</span></> }))} />
+              <RankedList limit={12} valueLabel="Clicks" csv={{ name: 'top clicks', nameHeader: 'Target' }} items={d.clicks.map((c) => ({ key: c.target, label: c.target, title: c.target, value: c.count, display: <>{fmtInt(c.count)} <span className="text-ink-3">· {fmtInt(c.sessions)} sess.</span></> }))} />
             )}
           </QueryView>
         </Panel>
@@ -79,6 +79,7 @@ export function Behavior() {
                 defaultSort={{ key: 'count', dir: 'desc' }}
                 columns={countCols<Engagement['outbound'][number]>('Link', (r) => (r.href ?? '(none)').replace(/^https?:\/\//, ''))}
                 caption="Outbound links"
+                csvName="outbound links"
               />
             )}
           </QueryView>
@@ -97,6 +98,7 @@ export function Behavior() {
                   { key: 'sessions', label: 'Sessions', align: 'right', sort: (r) => r.sessions, render: (r) => fmtInt(r.sessions) },
                 ]}
                 caption="All events"
+                csvName="all events"
               />
             )}
           </QueryView>

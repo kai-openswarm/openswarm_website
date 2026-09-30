@@ -1,4 +1,5 @@
-// CSV building for the signup export.
+// CSV building for exports.
+import { toDateInput } from './nav'
 
 /** Quotes a field when needed (RFC 4180). */
 export function csvField(value: unknown, opts: { guardFormula?: boolean } = {}): string {
@@ -28,4 +29,9 @@ export function downloadText(filename: string, text: string, type = 'text/csv;ch
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export function csvFilename(name: string) {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return `openswarm-${slug}-${toDateInput(new Date())}.csv`
 }

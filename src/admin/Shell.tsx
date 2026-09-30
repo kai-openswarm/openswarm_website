@@ -1,11 +1,13 @@
 import { useEffect, useRef, type ComponentType } from 'react'
 import {
-  Activity, Filter, Gauge, LayoutDashboard, LogOut, MousePointerClick, Settings as SettingsIcon, Share2, Signpost, UserPlus, Users,
+  Activity, Filter, Gauge, LayoutDashboard, LogOut, Mail, MousePointerClick, Settings as SettingsIcon, Share2, Signpost, UserPlus, Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useRoute, type Page } from './nav'
 import { useView } from './hooks'
-import { DateRangePicker, FilterChips } from './Toolbar'
+import { CompareSelect, DateRangePicker, FilterChips, RefreshButton } from './Toolbar'
+import { DATA_CAVEATS } from './definitions'
+import { EmailPage } from './pages/Email'
 import { Overview } from './pages/Overview'
 import { Realtime } from './pages/Realtime'
 import { Traffic } from './pages/Traffic'
@@ -35,14 +37,15 @@ const NAV: PageDef[] = [
   { id: 'behavior', label: 'Behavior', icon: MousePointerClick, description: 'What visitors see and do on the page.', toolbar: 'full', Component: Behavior },
   { id: 'funnel', label: 'Funnel', icon: Filter, description: 'From first visit to joining and sharing.', toolbar: 'full', Component: FunnelPage },
   { id: 'signups', label: 'Signups', icon: UserPlus, description: 'Everyone who joined the waitlist in this range.', toolbar: 'range', Component: Signups },
+  { id: 'email', label: 'Email', icon: Mail, description: 'Welcome email delivery, unsubscribes and signup email domains.', toolbar: 'range', Component: EmailPage },
   { id: 'referrals', label: 'Referrals', icon: Share2, description: 'Invite links and who is spreading the word.', toolbar: 'range', Component: ReferralsPage },
   { id: 'performance', label: 'Performance', icon: Gauge, description: 'Core Web Vitals and JavaScript errors from real visits.', toolbar: 'full', Component: PerformancePage },
-  { id: 'settings', label: 'Settings', icon: SettingsIcon, description: 'Waitlist counter, internal traffic, admins and audit log.', toolbar: 'none', Component: SettingsPage },
+  { id: 'settings', label: 'Settings', icon: SettingsIcon, description: 'Waitlist counter, internal traffic, email signup, annotations, admins and audit log.', toolbar: 'none', Component: SettingsPage },
 ]
 
 export function Shell({ email, mock, onSignOut }: { email: string; mock: boolean; onSignOut: () => void }) {
   const { page, go } = useRoute()
-  const { filters } = useView()
+  const { filters, clearFilters } = useView()
   const def = NAV.find((n) => n.id === page) ?? NAV[0]
   const heading = useRef<HTMLHeadingElement>(null)
   const mobileNav = useRef<HTMLElement>(null)
@@ -59,6 +62,18 @@ export function Shell({ email, mock, onSignOut }: { email: string; mock: boolean
   }, [def])
 
   const hasFilters = Object.keys(filters).length > 0
+
+  // Esc clears filters (R4), unless a dialog, popover or text field is handling it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !hasFilters || def.toolbar !== 'full') return
+      const t = e.target instanceof Element ? e.target : null
+      if (t?.closest('input, textarea, select, dialog, [role="dialog"]') || document.querySelector('dialog[open]')) return
+      clearFilters()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [hasFilters, def.toolbar, clearFilters])
   const Page = def.Component
 
   const navLink = (n: PageDef, compact: boolean) => {
@@ -136,8 +151,12 @@ export function Shell({ email, mock, onSignOut }: { email: string; mock: boolean
               <p className="mt-0.5 text-[13px] text-ink-3">{def.description}</p>
             </div>
             {def.toolbar !== 'none' && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                <DateRangePicker />
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <DateRangePicker />
+                  {def.id === 'overview' && <CompareSelect />}
+                  <RefreshButton />
+                </div>
                 {def.toolbar === 'full' ? (
                   <FilterChips />
                 ) : hasFilters ? (
@@ -145,8 +164,17 @@ export function Shell({ email, mock, onSignOut }: { email: string; mock: boolean
                 ) : null}
               </div>
             )}
+            {def.toolbar === 'none' && def.id !== 'settings' && <div><RefreshButton /></div>}
           </div>
           <Page key={def.id} />
+          {def.id !== 'settings' && (
+            <footer className="mt-8 border-t border-line pt-3 text-[12px] text-ink-3">
+              <p className="font-medium text-ink-2">About this data</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {DATA_CAVEATS.map((c) => <li key={c}>{c}</li>)}
+              </ul>
+            </footer>
+          )}
         </main>
       </div>
     </div>

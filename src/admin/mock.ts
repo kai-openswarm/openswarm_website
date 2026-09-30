@@ -5,10 +5,12 @@
 import type { AdminApi } from './api'
 import { ApiError } from './api'
 import type {
-  AdminSettings, AuditEntry, BreakdownRow, Bucket, Dimension, Engagement, ExportRow, Filters, Funnel,
-  Kpis, Performance, RangeQuery, Realtime, RealtimeEvent, Referrals, SectionKey, SignupRow, TimeseriesPoint, VitalRow,
+  AdminSettings, Annotation, AuditEntry, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
+  Kpis, Overview, Performance, RangeQuery, Realtime, RealtimeEvent, Referrals, SectionKey, SettingValues, SignupRow, TimeseriesPoint, VitalRow, WelcomeEmail,
 } from './types'
 import { NONE } from './types'
+import { fromWire, matchesClause } from './filters'
+import { DOMAIN_RE } from './validation'
 
 // ---------------------------------------------------------------------------
 // Random helpers
@@ -316,6 +318,13 @@ interface MockSignup {
   network_hash: string
   consent_version: string | null
   session: MockSession | null
+  unsubscribed_at: number | null
+  /** Opened the invite card after joining. */
+  opened: boolean
+  shares: { at: number; channel: string }[]
+  /** Distinct visitors who arrived on this person's invite link. */
+  invite_visitors: number
+  welcome: { status: 'sent' | 'failed' | 'skipped'; detail: string | null } | null
 }
 
 const DAY = 86_400_000
@@ -427,6 +436,7 @@ function buildDataset() {
         const signup: MockSignup = {
           email: legacy ? null : email(rand), phone, code: code(rand), created_at: started_at + Math.round(active_ms * 0.7), placement,
           referred_by, network_hash: code(rand, 22), consent_version: legacy ? null : 'email-2026-09-30', session: s,
+          unsubscribed_at: null, opened: false, shares: [], invite_visitors: 0, welcome: null,
         }
         signups.push(signup)
         if (chance(rand, 0.4)) referrers.push(signup)
@@ -441,12 +451,39 @@ function buildDataset() {
       const base = signups[signups.length - 1 - Math.floor(rand() * 200)]
       signups.push({
         ...base, email: email(rand), phone: null, consent_version: 'email-2026-09-30', code: code(rand),
+        unsubscribed_at: null, opened: false, shares: [], invite_visitors: 0, welcome: null,
         created_at: Math.min(now - 60_000, o.created_at + (j + 1) * 3_600_000), referred_by: o.code,
         network_hash: j < 3 ? o.network_hash : code(rand, 22), placement: 'hero', session: null,
       })
     }
   }
   signups.sort((a, b) => a.created_at - b.created_at)
+
+  // Referral loop, welcome emails and unsubscribes, from a separate stream so the
+  // traffic above stays the same.
+  const r2 = mulberry32(77)
+  const invitees = countBy(signups.filter((x) => x.referred_by), (x) => x.referred_by ?? '')
+  const welcomeSince = now - 21 * DAY
+  for (const x of signups) {
+    const n = invitees.get(x.code) ?? 0
+    x.opened = n > 0 || chance(r2, 0.68)
+    const shareCount = n > 0 ? 1 + Math.floor(r2() * 3) : x.opened && chance(r2, 0.4) ? 1 + Math.floor(r2() * 2) : 0
+    x.shares = Array.from({ length: shareCount }, () => ({
+      at: Math.min(now - 60_000, x.created_at + Math.floor(r2() * 2 * DAY)),
+      channel: pick(r2, [['copy', 38], ['native', 26], ['whatsapp', 12], ['x', 10], ['sms', 9], ['email', 5]] as const),
+    }))
+    x.invite_visitors = shareCount ? n + Math.round(n * (0.8 + r2() * 2.5)) + Math.floor(r2() * 3) : n
+    if (chance(r2, 0.018)) x.unsubscribed_at = Math.min(now - 60_000, x.created_at + Math.floor(r2() * 12 * DAY))
+    if (x.email && x.created_at >= welcomeSince) {
+      const status = pick(r2, [['sent', 94], ['failed', 3], ['skipped', 3]] as const)
+      x.welcome = {
+        status,
+        detail: status === 'failed'
+          ? pick(r2, [['Resend 422: The email address is invalid', 2], ['Resend 429: Rate limit exceeded', 1], ['Network timeout after 10s', 1]] as const)
+          : status === 'skipped' ? 'welcome email disabled' : null,
+      }
+    }
+  }
 
   return { sessions, signups }
 }
@@ -499,7 +536,33 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export function createMockApi(): AdminApi {
   const data = buildDataset()
-  const settings = { waitlist_count_baseline: 6327, include_internal: false }
+  const settings: SettingValues = {
+    waitlist_count_baseline: 6327,
+    include_internal: false,
+    signups_open: true,
+    signups_closed_message: 'The waitlist is paused right now. Please check back soon.',
+    blocked_email_domains: ['mailinator.com', 'example.com'],
+    block_disposable_email: true,
+    signup_limit_per_hour: 10,
+    signup_limit_per_day: 40,
+    welcome_email: {
+      enabled: false,
+      from_name: 'Open Swarm',
+      from_email: '',
+      reply_to: '',
+      subject: 'You’re on the Open Swarm waitlist',
+      body: 'Thanks for joining the Open Swarm waitlist. We’ll email you when early access opens.\n\nWant to move up? Invite 3 friends with your personal link and unlock priority access:\n{{invite_link}}\n\nThe Open Swarm team',
+      postal_address: '',
+    },
+  }
+  const dayStr = (daysAgo: number) => localStamp(Date.now() - daysAgo * DAY).slice(0, 10)
+  let annotationId = 4
+  const annotations: Annotation[] = [
+    { id: 1, starts_on: dayStr(24), ends_on: null, title: 'Product Hunt launch', color: 'orange', created_by: 'kai@openswarm.com', created_at: new Date(Date.now() - 24 * DAY).toISOString() },
+    { id: 2, starts_on: dayStr(9), ends_on: null, title: 'Viral X post', color: 'blue', created_by: 'alex@openswarm.com', created_at: new Date(Date.now() - 9 * DAY).toISOString() },
+    { id: 3, starts_on: dayStr(40), ends_on: dayStr(34), title: 'Paid social test', color: 'purple', created_by: 'haik@openswarm.com', created_at: new Date(Date.now() - 40 * DAY).toISOString() },
+    { id: 4, starts_on: dayStr(3), ends_on: null, title: 'Switched signup to email', color: 'green', created_by: 'eric@openswarm.com', created_at: new Date(Date.now() - 3 * DAY).toISOString() },
+  ]
   const me = 'you@openswarm.com'
   const admins = [
     { email: 'alex@openswarm.com', added_at: '2026-09-28T16:02:11Z', added_by: 'migration' },
@@ -529,11 +592,11 @@ export function createMockApi(): AdminApi {
   function filtered(from: string, to: string, filters: Filters) {
     const a = Date.parse(from)
     const b = Date.parse(to)
-    const entries = Object.entries(filters) as [Dimension, string][]
+    const entries = Object.entries(fromWire(filters)) as [Dimension, FilterClause][]
     return data.sessions.filter((s) => {
       if (s.started_at < a || s.started_at >= b) return false
       if (s.is_internal && !settings.include_internal) return false
-      for (const [k, v] of entries) if ((s.dims[k] ?? NONE) !== v) return false
+      for (const [k, c] of entries) if (!matchesClause(s.dims[k], c)) return false
       return true
     })
   }
@@ -573,14 +636,21 @@ export function createMockApi(): AdminApi {
     mode: 'mock',
     whoami: () => delay(() => ({ email: me, is_admin: true }), 120, false),
 
-    overview: (q) => delay(() => {
+    overview: (q, compare) => delay((): Overview => {
       const len = Date.parse(q.to) - Date.parse(q.from)
-      const prevFrom = new Date(Date.parse(q.from) - len).toISOString()
+      const cFrom = compare?.from ?? new Date(Date.parse(q.from) - len).toISOString()
+      const cTo = compare?.to ?? q.from
+      const last = data.signups.at(-1)
+      const lastRef = [...data.signups].reverse().find((x) => x.referred_by)
       return {
         current: kpis(q.from, q.to, q.filters),
-        previous: kpis(prevFrom, q.from, q.filters),
+        previous: kpis(cFrom, cTo, q.filters),
+        compare_from: cFrom,
+        compare_to: cTo,
         all_time_signups: data.signups.length,
         display_count: settings.waitlist_count_baseline + data.signups.length,
+        last_signup_at: last ? new Date(last.created_at).toISOString() : null,
+        last_referral_at: lastRef ? new Date(lastRef.created_at).toISOString() : null,
       }
     }),
 
@@ -706,6 +776,8 @@ export function createMockApi(): AdminApi {
     }),
 
     realtime: () => delay((): Realtime => {
+      const midnight = new Date()
+      midnight.setHours(0, 0, 0, 0)
       const now = Date.now()
       const minute = Math.floor(now / 60_000)
       const rand = mulberry32(minute)
@@ -743,6 +815,13 @@ export function createMockApi(): AdminApi {
         countries: tally((x) => x.dims.country ?? NONE).map(({ k, visitors }) => ({ country: k, visitors })),
         sources: tally((x) => x.dims.source ?? NONE).map(({ k, visitors }) => ({ source: k, visitors })),
         devices: tally((x) => x.dims.device_type ?? NONE).map(({ k, visitors }) => ({ device_type: k, visitors })),
+        sections: tally((x) => SECTIONS[Math.min(5, Math.floor(rand() * (x.section + 1)))]).map(({ k, visitors }) => ({ section: k, visitors })),
+        today: {
+          since: midnight.toISOString(),
+          signups: data.signups.filter((x) => x.created_at >= midnight.getTime()).length,
+          referred_signups: data.signups.filter((x) => x.created_at >= midnight.getTime() && x.referred_by).length,
+          visitors: new Set(data.sessions.filter((x) => x.started_at >= midnight.getTime() && !x.is_internal).map((x) => x.visitor_id)).size,
+        },
         recent,
       }
     }, 250),
@@ -814,10 +893,42 @@ export function createMockApi(): AdminApi {
       })
       const dist = [0, 0, 0, 0]
       for (const x of inv) dist[Math.min(x.invites, 3)]++
+      // Cohort: people who joined in the range, and everyone they have brought in since.
+      const cohort = period.map((o) => ({ o, invitees: (byCode.get(o.code) ?? []).length }))
+      const size = cohort.length
+      const cohortInvitees = cohort.reduce((t, x) => t + x.invitees, 0)
+      const referrersN = cohort.filter((x) => x.invitees > 0).length
+      const visitors = cohort.reduce((t, x) => t + x.o.invite_visitors, 0)
+      const shares = data.signups.flatMap((x) => x.shares).filter((x) => x.at >= a && x.at < b)
+      const byDay = new Map<string, number>()
+      for (const x of shares) {
+        const k = `${localStamp(x.at).slice(0, 10)}|${x.channel}`
+        byDay.set(k, (byDay.get(k) ?? 0) + 1)
+      }
+      const share = period.length ? r4(referred.length / period.length) : 0
       return {
         signups: period.length,
         referred_signups: referred.length,
-        k_factor: period.length ? r4(referred.length / period.length) : 0,
+        referred_share: share,
+        k_factor: share,
+        classic_k: size ? r4(cohortInvitees / size) : 0,
+        invite_visits_per_signup: size ? r4(visitors / size) : 0,
+        invite_conversion: visitors ? r4(Math.min(1, cohortInvitees / visitors)) : 0,
+        referral_rate: size ? r4(referrersN / size) : 0,
+        invites_per_active_referrer: referrersN ? Math.round((cohortInvitees / referrersN) * 100) / 100 : 0,
+        loop_funnel: [
+          { key: 'joined', label: 'Joined in this range', people: size },
+          { key: 'opened', label: 'Opened their invite card', people: cohort.filter((x) => x.o.opened).length },
+          { key: 'shared', label: 'Shared or copied their link', people: cohort.filter((x) => x.o.shares.length > 0).length },
+          { key: 'visited', label: 'Link brought a visitor', people: cohort.filter((x) => x.o.invite_visitors > 0).length },
+          { key: 'converted', label: 'Brought at least one signup', people: referrersN },
+          { key: 'priority', label: 'Unlocked priority (3+)', people: cohort.filter((x) => x.invitees >= 3).length },
+        ],
+        shares_by_channel: [...countBy(shares, (x) => x.channel).entries()].map(([channel, n]) => ({ channel, shares: n })).sort((p, q) => q.shares - p.shares),
+        shares_by_day: [...byDay.entries()].map(([k, n]) => {
+          const [day, channel] = k.split('|')
+          return { day, channel, shares: n }
+        }).sort((p, q) => p.day.localeCompare(q.day) || p.channel.localeCompare(q.channel)),
         active_referrers: new Set(referred.map((s) => s.referred_by)).size,
         priority_unlocked: inv.filter((x) => x.invites >= 3).length,
         distribution: (['0', '1', '2', '3+'] as const).map((bucket, i) => ({ bucket, people: dist[i] })),
@@ -884,15 +995,38 @@ export function createMockApi(): AdminApi {
       display_count: settings.waitlist_count_baseline + data.signups.length, audit: audit.slice(0, 50),
     })),
 
-    updateSetting: (key: string, value: number | boolean) => delay(() => {
-      if (key === 'waitlist_count_baseline') {
-        if (typeof value !== 'number' || value < 0 || !Number.isInteger(value)) throw new ApiError('The baseline must be a whole number of 0 or more.', '22023')
-        settings.waitlist_count_baseline = value
-      } else if (key === 'include_internal') {
-        if (typeof value !== 'boolean') throw new ApiError('include_internal must be true or false.', '22023')
-        settings.include_internal = value
-      } else throw new ApiError(`Unknown setting: ${key}`, '22023')
-      audited('update_setting', { key, value })
+    updateSetting: (key, value) => delay(() => {
+      // Mirrors admin_update_setting's validation.
+      const bad = (m: string) => new ApiError(m, '22023')
+      const v: unknown = value
+      switch (key) {
+        case 'waitlist_count_baseline':
+        case 'signup_limit_per_hour':
+        case 'signup_limit_per_day':
+          if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) throw bad(`${key} must be a whole number.`)
+          if (key !== 'waitlist_count_baseline' && (v < 1 || v > 10000)) throw bad('Signup limits must be between 1 and 10000.')
+          break
+        case 'include_internal':
+        case 'signups_open':
+        case 'block_disposable_email':
+          if (typeof v !== 'boolean') throw bad(`${key} must be true or false.`)
+          break
+        case 'signups_closed_message':
+          if (typeof v !== 'string' || v.trim().length < 1 || v.trim().length > 200) throw bad('The closed message must be 1 to 200 characters.')
+          break
+        case 'blocked_email_domains':
+          if (!Array.isArray(v) || v.length > 500 || v.some((d) => typeof d !== 'string' || !DOMAIN_RE.test(d))) throw bad('Blocked domains must be up to 500 lowercase domain names, such as example.com.')
+          break
+        case 'welcome_email': {
+          const w = v as WelcomeEmail
+          if (w.enabled && (!w.from_email || !w.postal_address.trim())) throw bad('Set a from address and a postal address before turning the welcome email on.')
+          break
+        }
+        default:
+          throw bad(`Unknown setting: ${String(key)}`)
+      }
+      ;(settings as unknown as Record<string, unknown>)[key] = structuredClone(v)
+      audited('update_setting', { key, value: v })
     }),
 
     removeAdmin: (email) => delay(() => {
@@ -909,6 +1043,57 @@ export function createMockApi(): AdminApi {
       if (!admins.some((a) => a.email === e)) admins.push({ email: e, added_at: new Date().toISOString(), added_by: me })
       audited('add_admin', { email: e })
     }, 700),
+
+    testEmail: (w) => delay(() => {
+      if (new URLSearchParams(window.location.search).get('mockresend') === '0') {
+        throw new ApiError('Email sending is not configured: set RESEND_API_KEY on the server.', '503')
+      }
+      if (!w.from_email) throw new ApiError('Set a from address first.', '400')
+    }, 900),
+
+    annotations: (r) => delay(() => {
+      const from = localStamp(Date.parse(r.from)).slice(0, 10)
+      const to = localStamp(Date.parse(r.to)).slice(0, 10)
+      return annotations.filter((x) => x.starts_on <= to && (x.ends_on ?? x.starts_on) >= from).sort((x, y) => x.starts_on.localeCompare(y.starts_on))
+    }),
+
+    addAnnotation: (x) => delay(() => {
+      const title = x.title.trim()
+      if (title.length < 1 || title.length > 60) throw new ApiError('Titles are 1 to 60 characters.', '23514')
+      if (x.ends_on && x.ends_on < x.starts_on) throw new ApiError('The end date must be on or after the start date.', '23514')
+      const id = ++annotationId
+      annotations.push({ id, ...x, title, created_by: me, created_at: new Date().toISOString() })
+      audited('add_annotation', { id, title })
+      return id
+    }),
+
+    deleteAnnotation: (id) => delay(() => {
+      const i = annotations.findIndex((x) => x.id === id)
+      if (i >= 0) annotations.splice(i, 1)
+      audited('delete_annotation', { id })
+    }),
+
+    emailReport: (r) => delay((): EmailReport => {
+      const a = Date.parse(r.from)
+      const b = Date.parse(r.to)
+      const inRange = signupsIn(r.from, r.to)
+      const welcome = inRange.filter((x) => x.welcome)
+      return {
+        welcome: {
+          sent: welcome.filter((x) => x.welcome?.status === 'sent').length,
+          failed: welcome.filter((x) => x.welcome?.status === 'failed').length,
+          skipped: welcome.filter((x) => x.welcome?.status === 'skipped').length,
+        },
+        recent_failures: welcome.filter((x) => x.welcome?.status === 'failed').reverse().slice(0, 20)
+          .map((x) => ({ created_at: new Date(x.created_at + 4000).toISOString(), kind: 'welcome' as const, detail: x.welcome?.detail ?? null })),
+        unsubscribed: data.signups.filter((x) => x.unsubscribed_at !== null && x.unsubscribed_at >= a && x.unsubscribed_at < b).length,
+        unsubscribed_all_time: data.signups.filter((x) => x.unsubscribed_at !== null).length,
+        domains: [...countBy(inRange.filter((x) => x.email), (x) => x.email!.split('@')[1]).entries()]
+          .map(([domain, signups]) => ({ domain, signups }))
+          .sort((x, y) => y.signups - x.signups || x.domain.localeCompare(y.domain))
+          .slice(0, 25),
+      }
+    }),
   }
 
   function invitesOf(s: MockSignup) {

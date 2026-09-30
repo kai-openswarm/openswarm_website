@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { AdminApi } from './api'
-import { readFilters, resolveRange, useRoute } from './nav'
-import type { Dimension, RangeQuery } from './types'
+import { resolveRange, useRoute } from './nav'
+import type { Dimension, FilterClause, RangeQuery } from './types'
+import { clearAllClauses, flipOp, readClauses, toWire, writeClause } from './filters'
+import { markLoaded, useRefreshNonce } from './refresh'
 
 export const ApiContext = createContext<AdminApi | null>(null)
 
@@ -26,7 +28,8 @@ export interface QueryState<T> {
 export function useQuery<T>(key: string, fn: (api: AdminApi) => Promise<T>, opts: { refreshMs?: number; enabled?: boolean } = {}): QueryState<T> {
   const api = useApi()
   const [nonce, setNonce] = useState(0)
-  const request = `${key}#${nonce}`
+  const global = useRefreshNonce()
+  const request = `${key}#${nonce}#${global}`
   const [state, setState] = useState<{ doneFor: string | null; data?: T; error: Error | null }>({ doneFor: null, error: null })
   const seq = useRef(0)
   const fnRef = useRef(fn)
@@ -39,7 +42,11 @@ export function useQuery<T>(key: string, fn: (api: AdminApi) => Promise<T>, opts
     if (!enabled) return
     const id = ++seq.current
     fnRef.current(api).then(
-      (data) => { if (id === seq.current) setState({ doneFor: request, data, error: null }) },
+      (data) => {
+        if (id !== seq.current) return
+        setState({ doneFor: request, data, error: null })
+        markLoaded()
+      },
       (error: unknown) => {
         if (id === seq.current) setState((s) => ({ ...s, doneFor: request, error: error instanceof Error ? error : new Error(String(error)) }))
       },
@@ -76,23 +83,48 @@ export function useQuery<T>(key: string, fn: (api: AdminApi) => Promise<T>, opts
   return { data: state.data, error: loading ? null : state.error, loading, reload }
 }
 
-/** The global range + filters held in the URL. */
+/** The global range, comparison and filters held in the URL. */
 export function useView() {
   const { params, update } = useRoute()
+  const refresh = useRefreshNonce()
   const paramStr = params.toString()
-  // Recomputed per URL change; "today" rolls over on the next navigation or reload.
-  const range = useMemo(() => resolveRange(new URLSearchParams(paramStr)), [paramStr])
-  const filters = useMemo(() => readFilters(new URLSearchParams(paramStr)), [paramStr])
+  // Recomputed on URL change and on manual refresh, so relative ranges roll forward.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const range = useMemo(() => resolveRange(new URLSearchParams(paramStr)), [paramStr, refresh])
+  const clauses = useMemo(() => readClauses(new URLSearchParams(paramStr)), [paramStr])
+  const filters = useMemo(() => toWire(clauses), [clauses])
   const query: RangeQuery = useMemo(() => ({ from: range.fromIso, to: range.toIso, filters }), [range, filters])
+  const compareQuery: RangeQuery | null = useMemo(
+    () => (range.compareFrom && range.compareTo ? { from: range.compareFrom.toISOString(), to: range.compareTo.toISOString(), filters } : null),
+    [range, filters],
+  )
   const key = `${range.fromIso}|${range.toIso}|${JSON.stringify(filters)}`
 
-  const addFilter = useCallback((dim: Dimension, value: string) => update((p) => p.set(`f.${dim}`, value)), [update])
-  const removeFilter = useCallback((dim: Dimension) => update((p) => p.delete(`f.${dim}`)), [update])
-  const clearFilters = useCallback(() => update((p) => {
-    for (const k of [...p.keys()]) if (k.startsWith('f.')) p.delete(k)
+  /** Row clicks: adds the value to an existing "is" clause (OR), otherwise starts one. */
+  const addFilter = useCallback((dim: Dimension, value: string) => update((p) => {
+    const cur = readClauses(p)[dim]
+    const values = cur?.op === 'is' ? [...new Set([...cur.values, value])] : [value]
+    writeClause(p, dim, { op: 'is', values })
   }), [update])
+  const setClause = useCallback((dim: Dimension, clause: FilterClause | null) => update((p) => writeClause(p, dim, clause)), [update])
+  const toggleOp = useCallback((dim: Dimension) => update((p) => {
+    const cur = readClauses(p)[dim]
+    if (cur) writeClause(p, dim, { ...cur, op: flipOp(cur.op) })
+  }), [update])
+  const removeFilter = useCallback((dim: Dimension) => update((p) => writeClause(p, dim, null)), [update])
+  const clearFilters = useCallback(() => update(clearAllClauses), [update])
 
-  return { range, filters, query, key, addFilter, removeFilter, clearFilters, params, update }
+  return { range, clauses, filters, query, compareQuery, key, addFilter, setClause, toggleOp, removeFilter, clearFilters, params, update }
+}
+
+/** Current time, updated every `ms` (for "x minutes ago" labels). */
+export function useNow(ms: number) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), ms)
+    return () => window.clearInterval(t)
+  }, [ms])
+  return now
 }
 
 export function useDebounced<T>(value: T, ms: number): T {

@@ -67,9 +67,9 @@ export function Signups() {
   }
 
   const columns: Column<SignupRow>[] = [
-    { key: 'created_at', label: 'Joined', render: (s) => <time dateTime={s.created_at} className="num">{fmtDateTime(s.created_at)}</time> },
+    { key: 'created_at', label: 'Joined', csv: (s) => s.created_at, render: (s) => <time dateTime={s.created_at} className="num">{fmtDateTime(s.created_at)}</time> },
     {
-      key: 'contact', label: 'Contact', render: (s) => {
+      key: 'contact', label: 'Contact', csv: (s) => s.contact_masked, render: (s) => {
         const v = revealed[s.code]
         return (
           <span className="inline-flex items-center gap-2">
@@ -86,9 +86,9 @@ export function Signups() {
         )
       },
     },
-    { key: 'placement', label: 'Placement', render: (s) => s.placement },
+    { key: 'placement', label: 'Placement', csv: (s) => s.placement, render: (s) => s.placement },
     {
-      key: 'channel', label: 'Channel / source', render: (s) => (
+      key: 'channel', label: 'Channel / source', csv: (s) => [s.channel, s.traffic_source, s.utm_campaign].filter(Boolean).join(' / '), render: (s) => (
         <span className="flex flex-col leading-tight">
           <span>{s.channel ?? '(unknown)'}</span>
           <span className="max-w-[220px] truncate text-[12px] text-ink-3">
@@ -98,16 +98,16 @@ export function Signups() {
       ),
     },
     {
-      key: 'location', label: 'Location', render: (s) => (
+      key: 'location', label: 'Location', csv: (s) => [s.city, s.region, s.country].filter(Boolean).join(', '), render: (s) => (
         <span className="inline-block max-w-[200px] truncate align-middle" title={[s.city, s.region, countryName(s.country)].filter(Boolean).join(', ')}>
           {flag(s.country)} {[s.city, s.country ? countryName(s.country) : null].filter(Boolean).join(', ') || 'Unknown'}
         </span>
       ),
     },
-    { key: 'device', label: 'Device', render: (s) => [s.device_type ? capitalize(s.device_type) : null, s.browser].filter(Boolean).join(' · ') || '—' },
-    { key: 'time', label: 'Time to join', align: 'right', render: (s) => fmtDuration(s.seconds_to_signup) },
-    { key: 'invites', label: 'Invites', align: 'right', render: (s) => fmtInt(s.invites) },
-    { key: 'invited', label: 'Invited?', render: (s) => (s.was_invited ? <Badge tone="accent">Invited</Badge> : <span className="text-ink-3">—</span>) },
+    { key: 'device', label: 'Device', csv: (s) => [s.device_type, s.browser].filter(Boolean).join(' / '), render: (s) => [s.device_type ? capitalize(s.device_type) : null, s.browser].filter(Boolean).join(' · ') || '—' },
+    { key: 'time', label: 'Time to join', align: 'right', csv: (s) => s.seconds_to_signup, render: (s) => fmtDuration(s.seconds_to_signup) },
+    { key: 'invites', label: 'Invites', align: 'right', csv: (s) => s.invites, render: (s) => fmtInt(s.invites) },
+    { key: 'invited', label: 'Invited?', csv: (s) => s.was_invited, render: (s) => (s.was_invited ? <Badge tone="accent">Invited</Badge> : <span className="text-ink-3">—</span>) },
     {
       key: 'actions', label: 'Actions', srOnly: true, render: (s) => (
         <button type="button" onClick={() => setToDelete(s)} className="rounded p-1.5 text-ink-3 hover:bg-hover hover:text-down" aria-label={`Delete signup ${s.contact_masked}`} title="Delete">
@@ -157,7 +157,7 @@ export function Signups() {
         >
           {(d) => (
             <>
-              <DataTable columns={columns} rows={d.rows} rowKey={(s) => s.code} caption="Signups" />
+              <DataTable columns={columns} rows={d.rows} rowKey={(s) => s.code} caption="Signups" csvName={`signups page ${page + 1} (masked)`} />
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-ink-3">
                 <span className="num">
                   {fmtInt(page * PAGE_SIZE + 1)}–{fmtInt(page * PAGE_SIZE + d.rows.length)} of {fmtInt(total)}

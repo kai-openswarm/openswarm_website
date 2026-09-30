@@ -1,7 +1,7 @@
 import { useApi, useQuery, useView } from '../hooks'
 import { fmtInt, fmtPct } from '../format'
 import type { Funnel } from '../types'
-import { DataTable, EmptyState, Panel, QueryView, RankedList, SkeletonRows } from '../ui'
+import { CsvButton, DataTable, EmptyState, Panel, QueryView, RankedList, SkeletonRows } from '../ui'
 
 const ERROR_LABELS: Record<string, string> = {
   invalid_email: 'Invalid email address',
@@ -21,12 +21,14 @@ const ERROR_LABELS: Record<string, string> = {
 function Steps({ steps }: { steps: Funnel['steps'] }) {
   const top = steps[0]?.sessions ?? 0
   return (
-    <ol className="space-y-3">
+    <ol className="space-y-3.5">
       {steps.map((s, i) => {
         const prev = i > 0 ? steps[i - 1].sessions : null
         const overall = top > 0 ? s.sessions / top : 0
+        const prevOverall = prev !== null && top > 0 ? prev / top : overall
         const stepRate = prev ? s.sessions / prev : null
-        const drop = prev !== null ? prev - s.sessions : null
+        const drop = prev !== null ? Math.max(0, prev - s.sessions) : null
+        const dropRate = prev ? drop! / prev : null
         return (
           <li key={s.key}>
             <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[13px]">
@@ -36,16 +38,24 @@ function Steps({ steps }: { steps: Funnel['steps'] }) {
               </span>
               <span className="text-ink-2 num">
                 <span className="font-semibold text-ink">{fmtInt(s.sessions)}</span>
-                <span className="text-ink-3"> · {fmtPct(overall)} of visits</span>
+                <span className="text-ink-3"> · {fmtPct(overall)} of step 1</span>
+                {stepRate !== null && <span className="text-ink-3"> · {fmtPct(Math.min(stepRate, 1))} of previous</span>}
               </span>
             </div>
-            <div className="h-6 overflow-hidden rounded bg-hover" aria-hidden>
-              <div className="h-full rounded bg-accent" style={{ width: `${Math.min(1, overall) * 100}%`, opacity: 1 - i * 0.1 }} />
+            <div className="relative h-6 overflow-hidden rounded bg-hover" aria-hidden>
+              {/* Drop-off from the previous step, then the part that continued. */}
+              {prev !== null && prevOverall > overall && (
+                <div
+                  className="absolute inset-y-0 rounded-r"
+                  style={{ left: `${Math.min(1, overall) * 100}%`, width: `${Math.min(1, prevOverall - overall) * 100}%`, background: 'color-mix(in srgb, var(--down) 22%, transparent)' }}
+                />
+              )}
+              <div className="absolute inset-y-0 left-0 rounded bg-accent" style={{ width: `${Math.min(1, overall) * 100}%` }} />
             </div>
             {stepRate !== null && (
               <p className="mt-1 text-[12px] text-ink-3 num">
-                {fmtPct(Math.min(stepRate, 1))} from previous step
-                {drop !== null && drop > 0 && <> · <span className="text-down">{fmtInt(drop)} dropped off</span></>}
+                → {fmtPct(Math.min(stepRate, 1))} continued
+                {drop !== null && drop > 0 && dropRate !== null && <> · <span className="text-down">↓ {fmtPct(dropRate)} dropped off ({fmtInt(drop)})</span></>}
                 {stepRate > 1 && <> · includes sessions that skipped the previous step</>}
               </p>
             )}
@@ -63,7 +73,23 @@ export function FunnelPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Panel title="Signup funnel" subtitle="Sessions reaching each step. Step-to-step and overall conversion.">
+      <Panel
+        title="Signup funnel"
+        subtitle="Sessions reaching each step: % of step 1, % of the previous step, and the drop-off between them."
+        actions={q.data && (
+          <CsvButton
+            name="funnel"
+            getRows={() => {
+              const st = q.data?.steps ?? []
+              const top = st[0]?.sessions ?? 0
+              return {
+                header: ['Step', 'Label', 'Sessions', '% of step 1', '% of previous', 'Dropped off'],
+                rows: st.map((x, i) => [i + 1, x.label, x.sessions, top ? x.sessions / top : 0, i && st[i - 1].sessions ? x.sessions / st[i - 1].sessions : null, i ? Math.max(0, st[i - 1].sessions - x.sessions) : null]),
+              }
+            }}
+          />
+        )}
+      >
         <QueryView q={q} isEmpty={(d) => (d.steps[0]?.sessions ?? 0) === 0} skeleton={<SkeletonRows rows={6} />}>
           {(d) => (
             <>
@@ -87,6 +113,7 @@ export function FunnelPage() {
           <QueryView q={q} isEmpty={(d) => d.errors.length === 0} empty={<EmptyState text="No signup errors in this range" />}>
             {(d) => (
               <RankedList
+                csv={{ name: 'signup errors', nameHeader: 'Reason' }}
                 valueLabel="Count"
                 items={d.errors.map((e) => ({ key: e.reason, label: ERROR_LABELS[e.reason] ?? e.reason, title: e.reason, value: e.count, display: fmtInt(e.count) }))}
               />
@@ -101,6 +128,7 @@ export function FunnelPage() {
                 rowKey={(r) => r.source}
                 defaultSort={{ key: 'submitted', dir: 'desc' }}
                 caption="Submissions by form placement"
+                csvName="submissions by placement"
                 columns={[
                   { key: 'source', label: 'Placement', sort: (r) => r.source, render: (r) => r.source },
                   { key: 'submitted', label: 'Submitted', align: 'right', sort: (r) => r.submitted, render: (r) => fmtInt(r.submitted) },

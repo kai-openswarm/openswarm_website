@@ -4,7 +4,9 @@ import { useApi, useQuery } from '../hooks'
 import { fmtAgo, fmtDate, fmtDateTime, fmtInt } from '../format'
 import { errorMessage } from '../errors'
 import type { AdminSettings, AuditEntry } from '../types'
-import { Badge, Button, Dialog, EmptyState, Panel, QueryView, SkeletonRows, inputClass } from '../ui'
+import { Badge, Button, CsvButton, Dialog, EmptyState, Panel, QueryView, SkeletonRows, inputClass } from '../ui'
+import { SignupSettings } from './SignupSettings'
+import { AnnotationsManager } from '../Annotations'
 
 const ACTIONS: Record<string, string> = {
   reveal_contact: 'Revealed an email address',
@@ -14,6 +16,8 @@ const ACTIONS: Record<string, string> = {
   update_setting: 'Changed a setting',
   add_admin: 'Added an admin',
   remove_admin: 'Removed an admin',
+  add_annotation: 'Added an annotation',
+  delete_annotation: 'Deleted an annotation',
 }
 
 function auditDetail(e: AuditEntry): string {
@@ -22,7 +26,14 @@ function auditDetail(e: AuditEntry): string {
   switch (e.action) {
     case 'export_signups': return `${s('rows') ? `${fmtInt(Number(s('rows')))} rows, ` : ''}${s('from') ? fmtDate(s('from')) : ''} – ${s('to') ? fmtDate(s('to')) : ''}`
     case 'delete_signup': return s('masked')
-    case 'update_setting': return `${s('key')} → ${s('value')}`
+    case 'update_setting': {
+      const v = d.value
+      if (Array.isArray(v)) return `${s('key')} → ${v.length} item${v.length === 1 ? '' : 's'}`
+      if (v && typeof v === 'object') return `${s('key')} updated`
+      return `${s('key')} → ${s('value')}`
+    }
+    case 'add_annotation': return s('title')
+    case 'delete_annotation': return s('id') ? `#${s('id')}` : ''
     case 'add_admin':
     case 'remove_admin': return s('email')
     case 'reveal_contact':
@@ -49,13 +60,29 @@ export function SettingsPage() {
         </Panel>
       </div>
 
+      <Panel title="Email signup" subtitle="Who can join, what gets blocked, and the welcome email.">
+        <QueryView q={q} skeleton={<SkeletonRows rows={6} />}>
+          {(d) => <SignupSettings data={d} onSaved={q.reload} />}
+        </QueryView>
+      </Panel>
+
+      <Panel title="Annotations" subtitle="Notes on the charts for launches, posts and deploys. Everyone sees them.">
+        <AnnotationsManager />
+      </Panel>
+
       <Panel title="Admins" subtitle="People who can sign in to this dashboard.">
         <QueryView q={q} skeleton={<SkeletonRows rows={4} />}>
           {(d) => <Admins data={d} onChanged={q.reload} />}
         </QueryView>
       </Panel>
 
-      <Panel title="Audit log" subtitle="The 50 most recent sensitive actions.">
+      <Panel
+        title="Audit log"
+        subtitle="The 50 most recent sensitive actions."
+        actions={q.data && q.data.audit.length > 0 && (
+          <CsvButton name="audit log" getRows={() => ({ header: ['At', 'Actor', 'Action', 'Detail'], rows: (q.data?.audit ?? []).map((e) => [e.at, e.actor, e.action, JSON.stringify(e.detail)]) })} />
+        )}
+      >
         <QueryView q={q} isEmpty={(d) => d.audit.length === 0} skeleton={<SkeletonRows rows={5} />} empty={<EmptyState text="Nothing recorded yet" />}>
           {(d) => (
             <ol className="-mx-4 divide-y divide-line">

@@ -4,19 +4,21 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { isMockMode } from './mode'
 import { getSupabase } from './supabase'
 import type {
-  AdminSettings, Bucket, BreakdownRow, Dimension, Engagement, ExportRow, Funnel, Overview,
-  Performance, Range, RangeQuery, Realtime, Referrals, SettingKey, SignupsPage, TimeseriesPoint, Whoami,
+  AdminSettings, Annotation, Bucket, BreakdownRow, Dimension, EmailReport, Engagement, ExportRow, Funnel, NewAnnotation, Overview,
+  Performance, Range, RangeQuery, Realtime, Referrals, SettingKey, SettingValues, SignupsPage, TimeseriesPoint, WelcomeEmail, Whoami,
 } from './types'
 
 export interface AdminApi {
   readonly mode: 'live' | 'mock'
   whoami(): Promise<Whoami>
-  overview(q: RangeQuery): Promise<Overview>
+  /** compare defaults (server side) to the previous period of the same length. */
+  overview(q: RangeQuery, compare?: Range): Promise<Overview>
   timeseries(q: RangeQuery, bucket: Bucket, tz: string): Promise<TimeseriesPoint[]>
   breakdown(q: RangeQuery, dimension: Dimension, limit?: number): Promise<BreakdownRow[]>
   funnel(q: RangeQuery): Promise<Funnel>
   engagement(q: RangeQuery): Promise<Engagement>
-  realtime(): Promise<Realtime>
+  /** tz decides where "today" starts. */
+  realtime(tz: string): Promise<Realtime>
   signups(r: Range, search: string, limit: number, offset: number): Promise<SignupsPage>
   /** Returns the full email (or phone, for legacy signups). The server records the reveal in the audit log. */
   revealContact(code: string): Promise<string>
@@ -27,12 +29,16 @@ export interface AdminApi {
   referrals(r: Range): Promise<Referrals>
   performance(q: RangeQuery): Promise<Performance>
   settings(): Promise<AdminSettings>
-  updateSetting(key: 'waitlist_count_baseline', value: number): Promise<void>
-  updateSetting(key: 'include_internal', value: boolean): Promise<void>
-  updateSetting(key: SettingKey, value: number | boolean): Promise<void>
+  updateSetting<K extends SettingKey>(key: K, value: SettingValues[K]): Promise<void>
   removeAdmin(email: string): Promise<void>
   /** Adds the email to the allowlist and creates its login (POST /api/admin/invite). */
   inviteAdmin(email: string): Promise<void>
+  /** Sends the given (possibly unsaved) welcome email to the signed-in admin (POST /api/admin/test-email). */
+  testEmail(welcome: WelcomeEmail): Promise<void>
+  annotations(r: Range): Promise<Annotation[]>
+  addAnnotation(a: NewAnnotation): Promise<number>
+  deleteAnnotation(id: number): Promise<void>
+  emailReport(r: Range): Promise<EmailReport>
 }
 
 export class ApiError extends Error {
@@ -54,17 +60,35 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     if (error) throw new ApiError(error.message || 'Request failed.', error.code)
     return data as T
   }
+  /** Admin endpoints on the website API authenticate with the Supabase access token. */
+  async function postAdmin(path: string, payload: unknown, failure: string): Promise<void> {
+    const { data } = await sb.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new ApiError('Your session has expired. Sign in again.', '401')
+    let res: Response
+    try {
+      res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      })
+    } catch {
+      throw new ApiError('Could not reach the server. Check your connection and try again.')
+    }
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+    if (!res.ok || !body?.ok) throw new ApiError(body?.error || `${failure} (${res.status}).`, String(res.status))
+  }
   const rq = (q: RangeQuery) => ({ p_from: q.from, p_to: q.to, p_filters: q.filters })
 
   return {
     mode: 'live',
     whoami: () => rpc('admin_whoami'),
-    overview: (q) => rpc('admin_overview', rq(q)),
+    overview: (q, compare) => rpc('admin_overview', { ...rq(q), p_compare_from: compare?.from ?? null, p_compare_to: compare?.to ?? null }),
     timeseries: (q, bucket, tz) => rpc('admin_timeseries', { ...rq(q), p_bucket: bucket, p_tz: tz }),
     breakdown: (q, dimension, limit = 50) => rpc('admin_breakdown', { ...rq(q), p_dimension: dimension, p_limit: limit }),
     funnel: (q) => rpc('admin_funnel', rq(q)),
     engagement: (q) => rpc('admin_engagement', rq(q)),
-    realtime: () => rpc('admin_realtime'),
+    realtime: (tz) => rpc('admin_realtime', { p_tz: tz }),
     signups: (r, search, limit, offset) =>
       rpc('admin_signups', { p_from: r.from, p_to: r.to, p_search: search || null, p_limit: limit, p_offset: offset }),
     revealContact: (code) => rpc('admin_reveal_contact', { p_code: code }),
@@ -73,27 +97,14 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     referrals: (r) => rpc('admin_referrals', { p_from: r.from, p_to: r.to }),
     performance: (q) => rpc('admin_performance', rq(q)),
     settings: () => rpc('admin_settings'),
-    updateSetting: (key: SettingKey, value: number | boolean) => rpc<void>('admin_update_setting', { p_key: key, p_value: value }),
+    updateSetting: (key, value) => rpc<void>('admin_update_setting', { p_key: key, p_value: value }),
     removeAdmin: (email) => rpc('admin_remove_admin', { p_email: email }),
-    async inviteAdmin(email) {
-      const { data } = await sb.auth.getSession()
-      const token = data.session?.access_token
-      if (!token) throw new ApiError('Your session has expired. Sign in again.', '401')
-      let res: Response
-      try {
-        res = await fetch('/api/admin/invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ email }),
-        })
-      } catch {
-        throw new ApiError('Could not reach the server. Check your connection and try again.')
-      }
-      const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
-      if (!res.ok || !body?.ok) {
-        throw new ApiError(body?.error || `Invite failed (${res.status}).`, String(res.status))
-      }
-    },
+    inviteAdmin: (email) => postAdmin('/api/admin/invite', { email }, 'Invite failed'),
+    testEmail: (welcome) => postAdmin('/api/admin/test-email', { welcome_email: welcome }, 'Test email failed'),
+    annotations: (r) => rpc('admin_annotations', { p_from: r.from, p_to: r.to }),
+    addAnnotation: (a) => rpc('admin_add_annotation', { p_starts_on: a.starts_on, p_ends_on: a.ends_on, p_title: a.title, p_color: a.color }),
+    deleteAnnotation: (id) => rpc('admin_delete_annotation', { p_id: id }),
+    emailReport: (r) => rpc('admin_email_report', { p_from: r.from, p_to: r.to }),
   }
 }
 

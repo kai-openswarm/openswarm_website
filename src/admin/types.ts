@@ -1,4 +1,4 @@
-// Types for the public.admin_* RPC functions in sql/003_analytics.sql.
+// Types for the public.admin_* RPC functions in sql/003_analytics.sql and sql/005_admin_features.sql.
 // Field names and nullability mirror the jsonb each function builds.
 
 /** analytics.dimensions(): the only keys allowed in p_filters and p_dimension. */
@@ -10,8 +10,20 @@ export const DIMENSIONS = [
 
 export type Dimension = (typeof DIMENSIONS)[number]
 
-/** Equality filters on session dimensions. Missing values are the literal "(none)". */
-export type Filters = Partial<Record<Dimension, string>>
+export const FILTER_OPS = ['is', 'is_not', 'contains', 'not_contains'] as const
+export type FilterOp = (typeof FILTER_OPS)[number]
+
+/** One dimension's condition. Several values are OR'd. */
+export interface FilterClause {
+  op: FilterOp
+  values: string[]
+}
+
+/**
+ * p_filters as the SQL takes it: per dimension either a plain string ("is") or
+ * {op, values}. Dimensions are AND'd. Missing values are the literal "(none)".
+ */
+export type Filters = Partial<Record<Dimension, string | FilterClause>>
 
 export const NONE = '(none)'
 
@@ -52,9 +64,14 @@ export interface Kpis {
 
 export interface Overview {
   current: Kpis
+  /** KPIs for the comparison range (compare_from..compare_to). */
   previous: Kpis
+  compare_from: string
+  compare_to: string
   all_time_signups: number
   display_count: number
+  last_signup_at: string | null
+  last_referral_at: string | null
 }
 
 export interface TimeseriesPoint {
@@ -121,6 +138,10 @@ export interface Realtime {
   countries: { country: string; visitors: number }[]
   sources: { source: string; visitors: number }[]
   devices: { device_type: string; visitors: number }[]
+  /** Sections seen in the last 5 minutes (section_view events). */
+  sections: { section: string | null; visitors: number }[]
+  /** Since local midnight in the requested time zone. */
+  today: { since: string; signups: number; referred_signups: number; visitors: number }
   recent: RealtimeEvent[]
 }
 
@@ -189,11 +210,28 @@ export interface ExportRow {
   sessions_before: number | null
 }
 
+export type LoopStepKey = 'joined' | 'opened' | 'shared' | 'visited' | 'converted' | 'priority'
+
 export interface Referrals {
   signups: number
   referred_signups: number
-  /** Share of signups in range that were referred (0..1). */
+  /** Referred signups ÷ signups in range (0..1). */
+  referred_share: number
+  /** Deprecated alias of referred_share. */
   k_factor: number
+  /** Cohort (joined in range): invitees ÷ cohort size. */
+  classic_k: number
+  /** Distinct visitors on cohort invite links ÷ cohort size. */
+  invite_visits_per_signup: number
+  /** Cohort invitees ÷ invite-link visitors, capped at 1. */
+  invite_conversion: number
+  /** Cohort members with at least one invitee ÷ cohort size. */
+  referral_rate: number
+  invites_per_active_referrer: number
+  loop_funnel: { key: LoopStepKey; label: string; people: number }[]
+  shares_by_channel: { channel: string; shares: number }[]
+  /** day is "YYYY-MM-DD" (database time zone). */
+  shares_by_day: { day: string; channel: string; shares: number }[]
   active_referrers: number
   /** All time: people with 3+ invites. */
   priority_unlocked: number
@@ -235,12 +273,64 @@ export interface AuditEntry {
   detail: Record<string, unknown>
 }
 
+export interface WelcomeEmail {
+  enabled: boolean
+  from_name: string
+  from_email: string
+  reply_to: string
+  subject: string
+  body: string
+  postal_address: string
+}
+
+export interface SettingValues {
+  waitlist_count_baseline: number
+  include_internal: boolean
+  signups_open: boolean
+  signups_closed_message: string
+  blocked_email_domains: string[]
+  block_disposable_email: boolean
+  signup_limit_per_hour: number
+  signup_limit_per_day: number
+  welcome_email: WelcomeEmail
+}
+
+export type SettingKey = keyof SettingValues
+
 export interface AdminSettings {
   me: string
   admins: { email: string; added_at: string; added_by: string | null }[]
-  settings: { waitlist_count_baseline?: number; include_internal?: boolean } & Record<string, unknown>
+  settings: Partial<SettingValues> & Record<string, unknown>
   display_count: number
   audit: AuditEntry[]
 }
 
-export type SettingKey = 'waitlist_count_baseline' | 'include_internal'
+export const ANNOTATION_COLORS = ['blue', 'green', 'orange', 'red', 'purple', 'gray'] as const
+export type AnnotationColor = (typeof ANNOTATION_COLORS)[number]
+
+export interface Annotation {
+  id: number
+  /** "YYYY-MM-DD" */
+  starts_on: string
+  ends_on: string | null
+  title: string
+  color: AnnotationColor
+  created_by: string
+  created_at: string
+}
+
+export interface NewAnnotation {
+  starts_on: string
+  ends_on: string | null
+  title: string
+  color: AnnotationColor
+}
+
+export interface EmailReport {
+  welcome: { sent: number; failed: number; skipped: number }
+  recent_failures: { created_at: string; kind: 'welcome' | 'test'; detail: string | null }[]
+  unsubscribed: number
+  unsubscribed_all_time: number
+  /** Top 25 domains of email signups in range. */
+  domains: { domain: string; signups: number }[]
+}

@@ -91,19 +91,20 @@ export function PerformancePage() {
                 rows={rows}
                 rowKey={(r) => `${r.metric}|${r.device_type}`}
                 caption="Core Web Vitals"
+                csvName={`web vitals ${active === '__all' ? 'all devices' : active}`}
                 columns={[
                   {
-                    key: 'metric', label: 'Metric', render: (r) => (
+                    key: 'metric', label: 'Metric', csv: (r) => r.metric, render: (r) => (
                       <span className="flex flex-col leading-tight">
                         <span className="font-medium">{VITALS[r.metric ?? '']?.label ?? r.metric}</span>
                         <span className="text-[12px] text-ink-3">{VITALS[r.metric ?? '']?.description ?? ''}</span>
                       </span>
                     ),
                   },
-                  { key: 'p75', label: 'p75', align: 'right', render: (r) => <span className="font-medium">{fmtVital(r.metric ?? '', r.p75)}</span> },
-                  { key: 'rating', label: 'Rating', render: (r) => <RatingBadge r={rating(r.metric ?? '', r.p75)} /> },
-                  { key: 'dist', label: 'Good / NI / Poor', render: (r) => <Distribution row={r} /> },
-                  { key: 'samples', label: 'Samples', align: 'right', render: (r) => fmtInt(r.samples) },
+                  { key: 'p75', label: 'p75', align: 'right', csv: (r) => r.p75, render: (r) => <span className="font-medium">{fmtVital(r.metric ?? '', r.p75)}</span> },
+                  { key: 'rating', label: 'Rating', csv: (r) => rating(r.metric ?? '', r.p75), render: (r) => <RatingBadge r={rating(r.metric ?? '', r.p75)} /> },
+                  { key: 'dist', label: 'Good / NI / Poor', csv: (r) => `${r.good} / ${r.needs_improvement} / ${r.poor}`, render: (r) => <Distribution row={r} /> },
+                  { key: 'samples', label: 'Samples', align: 'right', csv: (r) => r.samples, render: (r) => fmtInt(r.samples) },
                 ]}
               />
             )
@@ -119,9 +120,10 @@ export function PerformancePage() {
               rowKey={(r) => `${r.message}|${r.source}`}
               defaultSort={{ key: 'count', dir: 'desc' }}
               caption="JavaScript errors"
+              csvName="javascript errors"
               columns={[
-                { key: 'message', label: 'Message', render: (r) => <span className="inline-block max-w-[420px] truncate align-middle font-mono text-[12px]" title={r.message ?? ''}>{r.message ?? '(no message)'}</span> },
-                { key: 'source', label: 'Source', render: (r) => <span className="inline-block max-w-[220px] truncate align-middle font-mono text-[12px] text-ink-3" title={r.source ?? ''}>{r.source ?? '—'}</span> },
+                { key: 'message', label: 'Message', csv: (r) => r.message, render: (r) => <span className="inline-block max-w-[420px] truncate align-middle font-mono text-[12px]" title={r.message ?? ''}>{r.message ?? '(no message)'}</span> },
+                { key: 'source', label: 'Source', csv: (r) => r.source, render: (r) => <span className="inline-block max-w-[220px] truncate align-middle font-mono text-[12px] text-ink-3" title={r.source ?? ''}>{r.source ?? '—'}</span> },
                 { key: 'count', label: 'Count', align: 'right', sort: (r) => r.count, render: (r) => fmtInt(r.count) },
                 { key: 'sessions', label: 'Sessions', align: 'right', sort: (r) => r.sessions, render: (r) => fmtInt(r.sessions) },
                 { key: 'last', label: 'Last seen', sort: (r) => r.last_seen, render: (r) => <time dateTime={r.last_seen} title={fmtDateTime(r.last_seen)}>{fmtAgo(r.last_seen)}</time> },

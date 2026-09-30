@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Monitor, Smartphone, Tablet } from 'lucide-react'
 import { useApi, useQuery } from '../hooks'
-import { capitalize, countryName, eventDetail, eventName, flag, fmtInt, fmtTimeSec } from '../format'
+import { SECTION_LABELS, capitalize, countryName, eventDetail, eventName, flag, fmtInt, fmtTime, fmtTimeSec } from '../format'
+import { browserTimeZone } from '../nav'
+import { DEFS } from '../definitions'
 import { MinuteBars } from '../charts'
-import { EmptyState, Panel, QueryView, RankedList, Skeleton, SkeletonRows } from '../ui'
+import { CsvButton, EmptyState, InfoTip, Panel, QueryView, RankedList, Skeleton, SkeletonRows } from '../ui'
 import type { RealtimeEvent } from '../types'
 
 const REFRESH_MS = 15_000
 
 export function Realtime() {
   const api = useApi()
-  const q = useQuery('realtime', async () => ({ ...(await api.realtime()), fetchedAt: new Date() }), { refreshMs: REFRESH_MS })
+  const q = useQuery('realtime', async () => ({ ...(await api.realtime(browserTimeZone)), fetchedAt: new Date() }), { refreshMs: REFRESH_MS })
   const updatedAt = q.data?.fetchedAt
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
 
@@ -29,7 +31,7 @@ export function Realtime() {
       </p>
 
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-        <Panel title="Active visitors" subtitle="In the last 5 minutes">
+        <Panel title="Active visitors" subtitle="In the last 5 minutes" info={DEFS.currentVisitors}>
           <QueryView q={q} skeleton={<Skeleton className="h-16 w-32" />}>
             {(d) => (
               <div>
@@ -46,12 +48,46 @@ export function Realtime() {
         </Panel>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <Panel title="Today" subtitle={q.data ? `Since ${fmtTime(q.data.today.since)} (${browserTimeZone})` : 'Since midnight'}>
+        <QueryView q={q} skeleton={<Skeleton className="h-12" />}>
+          {(d) => (
+            <dl className="grid grid-cols-3 gap-4">
+              {[
+                { label: 'Signups', value: d.today.signups, info: DEFS.signups },
+                { label: 'Referred signups', value: d.today.referred_signups, info: DEFS.referredSignups },
+                { label: 'Visitors', value: d.today.visitors, info: DEFS.visitors },
+              ].map((x) => (
+                <div key={x.label} className="min-w-0">
+                  <dt className="flex items-center gap-1 text-[12.5px] text-ink-3"><span className="truncate">{x.label}</span><InfoTip text={x.info} label={`${x.label} definition`} /></dt>
+                  <dd className="mt-0.5 text-[24px] leading-8 font-semibold tracking-tight num">{fmtInt(x.value)}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </QueryView>
+      </Panel>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Panel title="Sections in view now" subtitle="Visitors who saw each section in the last 5 minutes">
+          <QueryView q={q} isEmpty={(d) => d.sections.length === 0} empty={<EmptyState text="No section views right now" />}>
+            {(d) => (
+              <RankedList
+                valueLabel="Visitors"
+                csv={{ name: 'realtime sections', nameHeader: 'Section' }}
+                items={d.sections.map((s) => {
+                  const name = s.section ? (SECTION_LABELS[s.section] ?? s.section) : '(unknown)'
+                  return { key: s.section ?? '(none)', label: name, title: name, value: s.visitors, display: fmtInt(s.visitors) }
+                })}
+              />
+            )}
+          </QueryView>
+        </Panel>
         <Panel title="Countries">
           <QueryView q={q} isEmpty={(d) => d.countries.length === 0} empty={<EmptyState text="Nobody here right now" />}>
             {(d) => (
               <RankedList
                 valueLabel="Visitors"
+                csv={{ name: 'realtime countries', nameHeader: 'Country' }}
                 items={d.countries.map((c) => ({
                   key: c.country, value: c.visitors, display: fmtInt(c.visitors), title: countryName(c.country),
                   label: <span className="truncate">{flag(c.country)} {countryName(c.country)}</span>,
@@ -62,17 +98,29 @@ export function Realtime() {
         </Panel>
         <Panel title="Sources">
           <QueryView q={q} isEmpty={(d) => d.sources.length === 0} empty={<EmptyState text="Nobody here right now" />}>
-            {(d) => <RankedList valueLabel="Visitors" items={d.sources.map((s) => ({ key: s.source, label: s.source, title: s.source, value: s.visitors, display: fmtInt(s.visitors) }))} />}
+            {(d) => <RankedList valueLabel="Visitors" csv={{ name: 'realtime sources', nameHeader: 'Source' }} items={d.sources.map((s) => ({ key: s.source, label: s.source, title: s.source, value: s.visitors, display: fmtInt(s.visitors) }))} />}
           </QueryView>
         </Panel>
         <Panel title="Devices">
           <QueryView q={q} isEmpty={(d) => d.devices.length === 0} empty={<EmptyState text="Nobody here right now" />}>
-            {(d) => <RankedList valueLabel="Visitors" items={d.devices.map((s) => ({ key: s.device_type, label: capitalize(s.device_type), value: s.visitors, display: fmtInt(s.visitors) }))} />}
+            {(d) => <RankedList valueLabel="Visitors" csv={{ name: 'realtime devices', nameHeader: 'Device' }} items={d.devices.map((s) => ({ key: s.device_type, label: capitalize(s.device_type), title: s.device_type, value: s.visitors, display: fmtInt(s.visitors) }))} />}
           </QueryView>
         </Panel>
       </div>
 
-      <Panel title="Live events" subtitle="Most recent 40 events in the last 30 minutes (engagement pings and vitals hidden)">
+      <Panel
+        title="Live events"
+        subtitle="Most recent 40 events in the last 30 minutes (engagement pings and vitals hidden)"
+        actions={q.data && q.data.recent.length > 0 && (
+          <CsvButton
+            name="live events"
+            getRows={() => ({
+              header: ['Time', 'Event', 'Detail', 'Path', 'Country', 'City', 'Device', 'Browser', 'Source'],
+              rows: (q.data?.recent ?? []).map((e) => [e.occurred_at, e.name, eventDetail(e.name, e.props), e.path, e.country, e.city, e.device_type, e.browser, e.source]),
+            })}
+          />
+        )}
+      >
         <QueryView q={q} isEmpty={(d) => d.recent.length === 0} skeleton={<SkeletonRows rows={8} />} empty={<EmptyState text="No events in the last 30 minutes" />}>
           {(d) => (
             <ol className="-mx-4 divide-y divide-line">

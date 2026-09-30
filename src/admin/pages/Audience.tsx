@@ -1,5 +1,5 @@
 import { useApi, useQuery, useView } from '../hooks'
-import { BreakdownTabs } from '../Breakdown'
+import { BreakdownCsv, BreakdownTabs } from '../Breakdown'
 import { Donut } from '../charts'
 import { dimValue } from '../format'
 import type { Dimension } from '../types'
@@ -14,7 +14,7 @@ function DonutPanel({ dim, title }: { dim: Dimension; title: string }) {
   const { query, key, filters, addFilter } = useView()
   const q = useQuery(`donut|${dim}|${key}`, () => api.breakdown(query, dim, 20))
   return (
-    <Panel title={title} subtitle="Unique visitors">
+    <Panel title={title} subtitle="Unique visitors" actions={<BreakdownCsv dim={dim} />}>
       <QueryView q={q} isEmpty={(r) => r.length === 0} skeleton={<Skeleton className="h-36" />} empty={<EmptyState />}>
         {(rows) => (
           <Donut
