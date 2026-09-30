@@ -25,6 +25,7 @@
     "motion": "^13.4.2",
     "nodemailer": "^10.0.13",
     "pg": "^8.23.0",
+    "posthog-js": "^1.435.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "recharts": "^3.10.1",

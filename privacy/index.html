@@ -35,6 +35,7 @@
         <li><strong>Approximate location</strong>: country, region and city, derived by our hosting provider from your IP address. We do not store your IP address. For rate limiting and fraud prevention we store a one-way, keyed hash of it that cannot be turned back into the address.</li>
         <li><strong>How you found us</strong>: the referring website and any campaign tags in the link you followed (such as <code>utm_source</code>).</li>
         <li><strong>Performance and error data</strong>: page speed measurements and technical errors, so we can fix problems.</li>
+        <li><strong>Session recordings</strong>: a recording of how the page is used during some visits, such as scrolling, mouse movement and clicks, so we can see where the site is confusing. Anything you type into forms, including your email address, is hidden from recordings. Recordings are processed by PostHog on our behalf and are not made if you opt out below or your browser sends Global Privacy Control.</li>
         <li><strong>A random visitor identifier</strong> stored in your browser's local storage, so we can count returning visitors and tell which visit led to a signup. It is not linked to your identity unless you join the waitlist from that browser.</li>
       </ul>
       <h3>Advertising pixel</h3>
@@ -79,6 +80,7 @@
       <ul>
         <li>Vercel (website hosting and approximate location), Supabase (database), and Cloudflare (bot protection and content delivery).</li>
         <li>Google Workspace (our email sender) and Resend (a backup email delivery provider), when we send waitlist emails.</li>
+        <li>PostHog, which processes session recordings for us.</li>
         <li>X, through the advertising pixel described above, unless you opt out.</li>
         <li>AI model providers, to process conversations in the OpenSwarm app as described in <a href="#google-user-data">Google user data in the OpenSwarm app</a>.</li>
       </ul>
@@ -86,9 +88,9 @@
 
       <h2 id="your-choices">Your privacy choices</h2>
       <div class="panel">
-        <p>Turn off the X advertising pixel in this browser. We also honor the <strong>Global Privacy Control</strong> signal automatically. Our own first-party site analytics are not shared with advertisers.</p>
-        <button id="opt-out" type="button">Opt out of advertising tracking</button>
-        <button id="opt-in" class="secondary" type="button" hidden>Turn advertising tracking back on</button>
+        <p>Turn off the X advertising pixel and session recordings in this browser. We also honor the <strong>Global Privacy Control</strong> signal automatically. Our own first-party site analytics are not shared with advertisers.</p>
+        <button id="opt-out" type="button">Opt out of advertising tracking and recordings</button>
+        <button id="opt-in" class="secondary" type="button" hidden>Turn advertising tracking and recordings back on</button>
         <p id="choice-status" role="status"></p>
       </div>
       <ul>

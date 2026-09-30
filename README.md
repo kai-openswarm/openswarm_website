@@ -72,6 +72,7 @@ cp .env.example .env.local
 | --- | --- | --- |
 | `VITE_PUBLIC_SITE_URL` | Frontend | Public origin for invite links. Defaults to `https://openswarm.com`; localhost overrides are rejected |
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Admin dashboard | Supabase project URL and public anon key for admin sign-in |
+| `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` | Frontend | Optional PostHog project key and host for session replays (replays only; inputs masked) |
 | `VITE_TURNSTILE_SITE_KEY` | Frontend | Optional Cloudflare Turnstile site key for the signup bot check |
 | `VITE_X_SIGNUP_EVENT_ID` | Frontend | Optional X Ads conversion event id reported on each new signup |
 | `VITE_PRIVACY_URL`, `VITE_TERMS_URL` | Frontend | Optional HTTPS overrides for the built-in `/privacy/` and `/terms/` pages |

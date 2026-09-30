@@ -81,6 +81,12 @@ Emails use the queue from [the email flow](waitlist-email-flow.md): a signup and
 
 Unsubscribe links (`/api/waitlist/unsubscribe`) are signed with `WAITLIST_EMAIL_SECRET`, or a secret derived from `ANALYTICS_SALT` when that is unset; changing it invalidates links in emails already sent. Opening a link shows a confirmation button; mail clients' one-click unsubscribe posts directly. Unsubscribing sets `email_opted_out_at`, cancels queued emails and keeps the person's place on the waitlist.
 
+## Page overlay and session replays
+
+**Page overlay** (dashboard): the live landing page, loaded in a frame, with each section's reach and exit rate, scroll-depth lines and click counts drawn on the buttons, plus an exit-section chart built from `admin_page_overlay` (`sql/009_page_overlay.sql`). The tracker and the X pixel do not run inside a frame, so the overlay never counts as a visit.
+
+**Session replays** (`src/lib/replay.ts`): PostHog, configured for replays only. Autocapture, pageviews, heatmaps, surveys and feature flags are off, every form input is masked, and nothing personal is identified (`person_profiles: 'never'`). It loads after the page is idle and never runs locally, in the overlay frame, for internal browsers (`?internal=1`), after the privacy opt-out, or with Global Privacy Control. Each recording carries `openswarm_visitor` and `openswarm_session` properties, so a replay can be matched to a visit in the dashboard. Set `VITE_POSTHOG_KEY` (and `VITE_POSTHOG_HOST` for the EU cloud) in Vercel and redeploy; in PostHog, turn on session replay for the project and set the authorized domain to the site.
+
 ## Advertising pixel
 
 `src/lib/x-pixel.ts` loads the X pixel on hosted builds unless the browser sends Global Privacy Control or the visitor opted out on `/privacy/#your-choices`. It reports `.dmg` download clicks and, when `VITE_X_SIGNUP_EVENT_ID` is set, each new waitlist signup as a conversion. Create that conversion event in X Ads Manager first.
