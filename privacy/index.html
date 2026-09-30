@@ -20,7 +20,7 @@
       <h1>Privacy Policy</h1>
       <p class="meta">Effective September 30, 2026</p>
 
-      <p>This policy explains what Open Swarm Inc. ("Open Swarm", "we", "us") collects when you visit openswarm.com or join our waitlist, how we use it, and the choices you have. It covers this website and our waitlist emails. It does not cover the Open Swarm desktop app, which has its own terms.</p>
+      <p>This policy explains what Open Swarm Inc. ("Open Swarm", "we", "us") collects when you visit openswarm.com or join our waitlist, how we use it, and the choices you have. It covers this website, our waitlist emails, and how the OpenSwarm app handles data from Google accounts you connect to it (see <a href="#google-user-data">Google user data in the OpenSwarm app</a>). The OpenSwarm app's use is also governed by its license agreement.</p>
 
       <h2 id="what-we-collect">What we collect</h2>
       <h3>Information you give us</h3>
@@ -52,6 +52,50 @@
       <h2 id="emails">Emails</h2>
       <p>If you join the waitlist, we will email you about early access, invitations and product updates. Every marketing email includes an unsubscribe link, and you can unsubscribe at any time. <strong>We do not sell your email address or share it with third parties for their own marketing.</strong></p>
       <p>To understand whether our emails are useful, we measure whether an email was opened (using a tiny image that loads when the email is displayed) and whether its main button was clicked (the button passes briefly through our website). We record this against the email we sent you, not your browsing elsewhere. You can prevent open measurement by turning off automatic image loading in your email app. If an email is sent through our backup delivery provider, that provider also reports whether it was delivered or bounced.</p>
+
+      <!--
+        DRAFT: placeholders marked [TBD …] must be replaced with code-verified facts before this is merged.
+        Question numbers refer to the question list sent to Eric. Google checks this section against the
+        scopes requested on the OAuth consent screen, so it must match them exactly.
+      -->
+      <h2 id="google-user-data">Google user data in the OpenSwarm app</h2>
+      <p>The OpenSwarm app lets you connect your Google account so its agents can work with your Google services when you ask them to. This section explains what Google user data the app accesses, how it is used, stored, shared and deleted.</p>
+
+      <h3>What the app accesses and why</h3>
+      <p>The app asks for access only when you connect a Google service, and uses it only for the features you use:</p>
+      <ul>
+        <li><strong>Gmail</strong> ([TBD scope, Q1]): [TBD purpose, Q2, e.g. read, draft, send and organize email when you ask an agent to].</li>
+        <li><strong>Google Calendar</strong> ([TBD scope, Q1]): [TBD purpose, Q2].</li>
+        <li><strong>Google Drive</strong> ([TBD scope, Q1]): [TBD purpose, Q2].</li>
+        <li><strong>Google Docs, Sheets and Slides</strong> ([TBD scopes, Q1]): [TBD purpose, Q2].</li>
+        <li>[TBD any other Google scopes, including basic profile/email, Q1].</li>
+      </ul>
+
+      <h3>How it is used and where it goes</h3>
+      <ul>
+        <li>Data an agent reads from a connected Google service, such as an email, calendar event or file, is used on your computer for the task you asked for. It is not copied to OpenSwarm's servers for storage.</li>
+        <li>To complete a task, the content involved is sent to the AI model provider that powers the agent ([TBD provider names and whether they retain data, Q5–Q6]). It is used only to generate the response to your request.</li>
+        <li>[TBD usage sharing, Q7–Q8: e.g. "Content from your Google services is never included in usage data sent to OpenSwarm", or describe the opt-in if Google content can be included.]</li>
+        <li>We do not use Google user data for advertising, and we do not sell it.</li>
+        <li>We do not use Google user data to develop, improve or train generalized AI or machine learning models.</li>
+        <li>People at OpenSwarm do not read your Google user data, except with your explicit permission for specific items, when needed for security or to comply with law, or when the data is aggregated and anonymized for internal operations. [TBD confirm against access controls, Q8.]</li>
+      </ul>
+
+      <h3>Storage and security</h3>
+      <ul>
+        <li>The sign-in token for each connected Google service is stored on your computer [TBD where and how it is protected, Q11], and is the only Google credential OpenSwarm holds. OpenSwarm's servers help complete the sign-in but do not keep your Google data.</li>
+        <li>[TBD local data the app keeps, such as conversation history or caches, where, and for how long, Q12.]</li>
+        <li>[TBD security measures, Q15.]</li>
+      </ul>
+
+      <h3>Retention and deletion</h3>
+      <ul>
+        <li>Disconnecting a Google service in the app's Settings deletes its sign-in token from your computer. You can also remove OpenSwarm's access at any time from your Google Account at <a href="https://myaccount.google.com/permissions" rel="noreferrer">myaccount.google.com/permissions</a>.</li>
+        <li>[TBD what happens on sign-out, uninstall and account deletion, and retention of any cloud data, Q13–Q14.]</li>
+        <li>To ask us to delete data we hold, email <a href="mailto:privacy@openswarm.com">privacy@openswarm.com</a>.</li>
+      </ul>
+
+      <p><strong>OpenSwarm's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</strong></p>
 
       <h2 id="sharing">How information is shared</h2>
       <p>We share information only with service providers that help us operate, under contracts that limit their use of it:</p>
