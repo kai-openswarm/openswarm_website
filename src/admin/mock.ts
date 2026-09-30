@@ -1046,7 +1046,7 @@ export function createMockApi(): AdminApi {
 
     testEmail: (w) => delay(() => {
       if (new URLSearchParams(window.location.search).get('mockresend') === '0') {
-        throw new ApiError('Email sending is not configured: set RESEND_API_KEY on the server.', '503')
+        throw new ApiError('Email sending is not configured: set SMTP_HOST, SMTP_USER and SMTP_PASSWORD, or RESEND_API_KEY.', '503')
       }
       if (!w.from_email) throw new ApiError('Set a from address first.', '400')
     }, 900),

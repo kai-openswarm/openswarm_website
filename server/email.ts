@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import nodemailer from 'nodemailer'
 import { hashValue, hashingSecret, header, readBody, respond } from './http.ts'
 import type { WelcomeEmail } from './signup-config.ts'
 
@@ -47,7 +48,52 @@ export function renderWelcome(template: WelcomeEmail, inviteLink: string, unsubs
   return { text, html }
 }
 
-/** Sends through Resend (https://resend.com) when RESEND_API_KEY is set. */
+export type SmtpConfig = { host: string, port: number, user: string, password: string }
+
+/** SMTP settings from SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASSWORD; null unless host, user and password are all set. */
+export function smtpFromEnv(env: NodeJS.ProcessEnv = process.env): SmtpConfig | null {
+  const host = env.SMTP_HOST?.trim()
+  const user = env.SMTP_USER?.trim()
+  // Google shows app passwords in groups of four; the spaces are not part of the password.
+  const password = env.SMTP_PASSWORD?.replace(/\s+/g, '')
+  if (!host || !user || !password) return null
+  const port = Number(env.SMTP_PORT?.trim() || 587)
+  return { host, port: Number.isInteger(port) && port > 0 ? port : 587, user, password }
+}
+
+type MailMessage = {
+  from: string
+  to: string
+  replyTo?: string
+  subject: string
+  text: string
+  html: string
+  headers: Record<string, string>
+}
+type MailTransport = { sendMail(message: MailMessage): Promise<{ messageId?: string }> }
+
+const smtpTransport = (smtp: SmtpConfig): MailTransport => nodemailer.createTransport({
+  host: smtp.host,
+  port: smtp.port,
+  // Port 465 is TLS from the first byte; other ports must upgrade with STARTTLS before signing in.
+  secure: smtp.port === 465,
+  requireTLS: smtp.port !== 465,
+  auth: { user: smtp.user, pass: smtp.password },
+  connectionTimeout: 5_000,
+  greetingTimeout: 5_000,
+  socketTimeout: 8_000,
+})
+
+export type SendOptions = {
+  /** SMTP server to send through; null forces the Resend path. Defaults to the SMTP_* environment variables. */
+  smtp?: SmtpConfig | null
+  createTransport?: (smtp: SmtpConfig) => MailTransport
+}
+
+/**
+ * Sends through the SMTP server in SMTP_HOST, SMTP_USER and SMTP_PASSWORD when those are set,
+ * otherwise through Resend (https://resend.com) when RESEND_API_KEY is set.
+ */
 export async function sendWelcomeEmail(
   template: WelcomeEmail,
   to: string,
@@ -55,25 +101,47 @@ export async function sendWelcomeEmail(
   unsubscribe: string,
   apiKey = process.env.RESEND_API_KEY?.trim(),
   request_: typeof fetch = fetch,
+  options: SendOptions = {},
 ): Promise<EmailResult> {
-  if (!apiKey) return { status: 'skipped', detail: 'RESEND_API_KEY is not configured.' }
+  const smtp = options.smtp === undefined ? smtpFromEnv() : options.smtp
+  if (!smtp && !apiKey) {
+    return { status: 'skipped', detail: 'Email sending is not configured: set SMTP_HOST, SMTP_USER and SMTP_PASSWORD, or RESEND_API_KEY.' }
+  }
   if (!template.from_email) return { status: 'skipped', detail: 'No from address is set.' }
   const { text, html } = renderWelcome(template, inviteLink, unsubscribe)
+  const from = template.from_name ? `${template.from_name.replace(/[<>"]/g, '')} <${template.from_email}>` : template.from_email
+  const headers = {
+    'List-Unsubscribe': `<${unsubscribe}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  }
+  if (smtp) {
+    try {
+      const sent = await (options.createTransport ?? smtpTransport)(smtp).sendMail({
+        from,
+        to,
+        ...(template.reply_to ? { replyTo: template.reply_to } : {}),
+        subject: template.subject,
+        text,
+        html,
+        headers,
+      })
+      return { status: 'sent', providerId: sent.messageId }
+    } catch (error) {
+      return { status: 'failed', detail: `SMTP: ${error instanceof Error ? error.message : 'send failed'}`.slice(0, 500) }
+    }
+  }
   try {
     const response = await request_('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: template.from_name ? `${template.from_name.replace(/[<>"]/g, '')} <${template.from_email}>` : template.from_email,
+        from,
         to: [to],
         ...(template.reply_to ? { reply_to: template.reply_to } : {}),
         subject: template.subject,
         text,
         html,
-        headers: {
-          'List-Unsubscribe': `<${unsubscribe}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
+        headers,
       }),
       signal: AbortSignal.timeout(5_000),
     })

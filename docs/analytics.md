@@ -60,7 +60,7 @@ Applied in order in `classifyTraffic` (`server/analytics.ts`): paid (`utm_medium
    - Set the Site URL to `https://openswarm.com` and add `https://openswarm.com/admin/` (plus any preview domain's `/admin/`) to the redirect URLs.
    - Create logins for the four admins (Authentication → Users → Add user → "Send magic link", or invite from the dashboard's Settings page once one admin can sign in).
    - For reliable sign-in email delivery, configure custom SMTP (for example Resend). Supabase's built-in sender is rate-limited.
-3. **Vercel environment variables** (Production and Preview): `DATABASE_URL` (transaction pooler, port 6543, user `openswarm_api.<project-ref>`), `ANALYTICS_SALT`, `RESEND_API_KEY` (for welcome emails), `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`, `VITE_X_SIGNUP_EVENT_ID`, `ALLOWED_ORIGINS`. See `.env.example`.
+3. **Vercel environment variables** (Production and Preview): `DATABASE_URL` (transaction pooler, port 6543, user `openswarm_api.<project-ref>`), `ANALYTICS_SALT`, `SMTP_HOST`, `SMTP_USER` and `SMTP_PASSWORD` (for welcome emails; `RESEND_API_KEY` is used instead when SMTP is not set), `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`, `VITE_X_SIGNUP_EVENT_ID`, `ALLOWED_ORIGINS`. See `.env.example`.
 4. **Deploy** and check that `/api/stats` returns a count, a page view appears under Real-time, and a test signup shows its channel on the Signups page.
 
 ## Email signup settings

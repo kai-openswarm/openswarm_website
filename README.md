@@ -75,7 +75,8 @@ cp .env.example .env.local
 | `DATABASE_URL` | Hosted API | Server-only Postgres connection string. For Supabase, use the transaction pooler (port 6543) |
 | `ANALYTICS_SALT` | Hosted API | Server-only secret for hashing client IPs used in rate limits; IPs are never stored |
 | `SUPABASE_SERVICE_ROLE_KEY` | Hosted API | Server-only key used by `/api/admin/invite` to create admin logins |
-| `RESEND_API_KEY` | Hosted API | Optional; sends the welcome email configured in the dashboard |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Hosted API | Optional; sends the welcome email configured in the dashboard through this SMTP server (port defaults to 587) |
+| `RESEND_API_KEY` | Hosted API | Optional; sends the welcome email through Resend when SMTP is not set |
 | `TURNSTILE_SECRET_KEY` | Hosted API | Optional; when set, signups require a valid Turnstile token |
 | `ALLOWED_ORIGINS` | Hosted API | Optional comma-separated extra origins allowed to POST to the API |
 | `TEST_DATABASE_URL` | Test runner | Optional PostgreSQL server where the live integration tests may create and drop databases |

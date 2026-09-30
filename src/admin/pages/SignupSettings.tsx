@@ -278,7 +278,7 @@ function WelcomeEmailForm({ saved, me, onSaved }: { saved: WelcomeEmail; me: str
       setTestMsg({ ok: true, text: `Sent a test to ${me}. It uses the form as it is now, saved or not.` })
     } catch (e) {
       const m = errorMessage(e)
-      setTestMsg({ ok: false, text: /RESEND_API_KEY/i.test(m) ? `${m} Ask whoever runs the server to set RESEND_API_KEY; until then no email can be sent.` : m })
+      setTestMsg({ ok: false, text: /not configured/i.test(m) ? `${m} Ask whoever runs the server to set them; until then no email can be sent.` : m })
     } finally {
       setTesting(false)
     }
@@ -319,7 +319,7 @@ function WelcomeEmailForm({ saved, me, onSaved }: { saved: WelcomeEmail; me: str
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           {field('from_name', 'From name', { maxLength: 80 })}
-          {field('from_email', 'From address', { type: 'email', placeholder: 'hello@openswarm.com', hint: 'Must be on a domain verified with the email provider.' })}
+          {field('from_email', 'From address', { type: 'email', placeholder: 'hello@openswarm.com', hint: 'Must be an address the email provider lets this site send from: with SMTP, the mailbox that signs in or one of its aliases.' })}
           {field('reply_to', 'Reply-to (optional)', { type: 'email', placeholder: 'team@openswarm.com' })}
           {field('subject', 'Subject', { maxLength: 150 })}
         </div>

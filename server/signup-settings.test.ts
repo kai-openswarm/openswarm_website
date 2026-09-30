@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { test, type TestContext } from 'node:test'
-import { createUnsubscribeHandler, renderWelcome, sendWelcomeEmail, unsubscribeToken, unsubscribeUrl } from './email.ts'
+import { createUnsubscribeHandler, renderWelcome, sendWelcomeEmail, smtpFromEnv, unsubscribeToken, unsubscribeUrl } from './email.ts'
 import { createProductionWaitlistHandler } from './production-waitlist.ts'
 import { DEFAULT_SIGNUP_CONFIG, cachedSignupConfig, emailDomainRejected, parseSignupConfig, type SignupConfig } from './signup-config.ts'
 import type { WaitlistStore } from './waitlist.ts'
@@ -99,11 +99,42 @@ test('welcome emails carry the invite link, unsubscribe link, postal address and
     requests.push({ url, body: JSON.parse(String(init.body)) })
     return new Response(JSON.stringify({ id: 'em_123' }), { status: 200 })
   }) as typeof fetch
-  assert.deepEqual(await sendWelcomeEmail(template, 'alex@example.com', 'https://x', unsubscribe, 'key', fakeFetch), { status: 'sent', providerId: 'em_123' })
+  assert.deepEqual(await sendWelcomeEmail(template, 'alex@example.com', 'https://x', unsubscribe, 'key', fakeFetch, { smtp: null }), { status: 'sent', providerId: 'em_123' })
   assert.equal(requests[0].url, 'https://api.resend.com/emails')
   assert.equal(requests[0].body.from, 'Open Swarm <hello@openswarm.com>')
   assert.deepEqual((requests[0].body.headers as Record<string, string>)['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
-  assert.equal((await sendWelcomeEmail(template, 'a@b.co', 'x', 'y', undefined, fakeFetch)).status, 'skipped')
+  assert.equal((await sendWelcomeEmail(template, 'a@b.co', 'x', 'y', undefined, fakeFetch, { smtp: null })).status, 'skipped')
+})
+
+test('welcome emails go through SMTP when it is configured, ahead of Resend', async () => {
+  const template = { ...DEFAULT_SIGNUP_CONFIG.welcome_email, enabled: true, from_email: 'noreply@openswarm.com', reply_to: 'team@openswarm.com', postal_address: '1 Main St' }
+  assert.equal(smtpFromEnv({}), null)
+  assert.equal(smtpFromEnv({ SMTP_HOST: 'smtp.gmail.com', SMTP_USER: 'noreply@openswarm.com' }), null, 'a password is required')
+  const smtp = smtpFromEnv({ SMTP_HOST: ' smtp.gmail.com ', SMTP_USER: 'noreply@openswarm.com', SMTP_PASSWORD: 'abcd efgh ijkl mnop' })
+  assert.deepEqual(smtp, { host: 'smtp.gmail.com', port: 587, user: 'noreply@openswarm.com', password: 'abcdefghijklmnop' })
+
+  const mails: Record<string, unknown>[] = []
+  const used: unknown[] = []
+  const createTransport = (config: unknown) => {
+    used.push(config)
+    return { async sendMail(message: Record<string, unknown>) { mails.push(message); return { messageId: '<m1@openswarm.com>' } } }
+  }
+  const neverFetch = (async () => { throw new Error('Resend must not be called') }) as unknown as typeof fetch
+  assert.deepEqual(
+    await sendWelcomeEmail(template, 'alex@example.com', 'https://x', 'https://u', 'key', neverFetch, { smtp, createTransport }),
+    { status: 'sent', providerId: '<m1@openswarm.com>' },
+  )
+  assert.deepEqual(used, [smtp])
+  assert.equal(mails[0].from, 'Open Swarm <noreply@openswarm.com>')
+  assert.equal(mails[0].to, 'alex@example.com')
+  assert.equal(mails[0].replyTo, 'team@openswarm.com')
+  assert.equal((mails[0].headers as Record<string, string>)['List-Unsubscribe'], '<https://u>')
+
+  const failing = () => ({ async sendMail(): Promise<never> { throw new Error('Invalid login') } })
+  assert.deepEqual(
+    await sendWelcomeEmail(template, 'alex@example.com', 'https://x', 'https://u', undefined, neverFetch, { smtp, createTransport: failing }),
+    { status: 'failed', detail: 'SMTP: Invalid login' },
+  )
 })
 
 test('unsubscribe links need a valid token, confirm on GET and unsubscribe on POST', async (t) => {
