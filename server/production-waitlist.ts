@@ -1,12 +1,16 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { waitUntil } from '@vercel/functions'
 import { Pool } from 'pg'
 import { createCollectHandler, parseUserAgent, type AnalyticsStore } from './analytics.ts'
+import { readEmailDeliveryConfig, type EmailDeliverySetup } from './email-delivery.ts'
+import { createUnsubscribeHandler } from './email-unsubscribe.ts'
 import { RequestError, clientIp, hashValue, hashingSecret, header, originAllowed, requestGeo } from './http.ts'
 import { createPostgresAnalyticsStore } from './postgres-analytics.ts'
 import { createPostgresWaitlistStore } from './postgres-waitlist.ts'
-import { createUnsubscribeHandler, publicOrigin, sendWelcomeEmail, unsubscribeUrl } from './email.ts'
-import { cachedSignupConfig } from './signup-config.ts'
+import { cachedSignupConfig, type SignupConfig } from './signup-config.ts'
 import { SUPABASE_ROOT_CA } from './supabase-ca.ts'
+import { createWaitlistMailer, emailEvents } from './waitlist-mailer.ts'
 import { createWaitlistMiddleware, type WaitlistOptions, type WaitlistStore } from './waitlist.ts'
 
 const unavailable: WaitlistStore = {
@@ -88,18 +92,6 @@ export async function verifyTurnstile(token: string | undefined, request: Incomi
   }
 }
 
-/** Welcome email and its log entry. Failures are logged, never surfaced to the visitor. */
-export function welcomeSender(database: Pick<Pool, 'query'>, secret = hashingSecret()): NonNullable<WaitlistOptions['afterSignup']> {
-  return async ({ email, referral, config }, request) => {
-    if (!config.welcome_email.enabled) return
-    const origin = publicOrigin(request)
-    const invite = new URL('/', origin)
-    invite.searchParams.set('ref', referral.code)
-    const result = await sendWelcomeEmail(config.welcome_email, email, invite.toString(), unsubscribeUrl(origin, referral.code, secret))
-    await database.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [referral.code, 'welcome', result.status, result.providerId ?? null, result.detail ?? null])
-  }
-}
-
 /** Origin checks, per-network rate limits, bot challenge and signup context for hosted requests. */
 export function productionWaitlistOptions(analytics: AnalyticsStore, secret = hashingSecret()): WaitlistOptions {
   const network = (request: IncomingMessage) => hashValue(clientIp(request), secret)
@@ -124,6 +116,22 @@ export function productionWaitlistOptions(analytics: AnalyticsStore, secret = ha
   }
 }
 
+
+let signupConfig: (() => Promise<SignupConfig>) | undefined
+
+/** Admin-edited signup and email settings, read at most every 30 seconds per instance. */
+export function productionSignupConfig(database: Pick<Pool, 'query'>) {
+  signupConfig ??= cachedSignupConfig(async () => (await database.query('SELECT analytics.signup_config() AS config')).rows[0]?.config)
+  return signupConfig
+}
+
+/** The waitlist mailer when SMTP is configured; emails still only go out when switched on in the dashboard. */
+export function productionMailer(database: Pool, setup: EmailDeliverySetup = readEmailDeliveryConfig()) {
+  return setup.state === 'ready'
+    ? createWaitlistMailer({ database, delivery: setup.config, config: productionSignupConfig(database) })
+    : null
+}
+
 let productionHandler: ReturnType<typeof createProductionWaitlistHandler> | undefined
 
 /** Hosted entry points never fall back to a process-local JSON file. */
@@ -131,10 +139,14 @@ export function handleProductionWaitlist(request: IncomingMessage, response: Ser
   if (!productionHandler) {
     const database = productionPool()
     if (!database) return createProductionWaitlistHandler(unavailable)(request, response)
+    const mailer = productionMailer(database)
     productionHandler = createProductionWaitlistHandler(createPostgresWaitlistStore(database), {
       ...productionWaitlistOptions(createPostgresAnalyticsStore(database)),
-      config: cachedSignupConfig(async () => (await database.query('SELECT analytics.signup_config() AS config')).rows[0]?.config),
-      afterSignup: welcomeSender(database),
+      config: productionSignupConfig(database),
+      emailEvents: (config) => emailEvents(config, !!mailer),
+      // The signup and its email job commit together; delivery happens after the response.
+      // A daily worker and the dashboard's "Send pending now" pick up anything left over.
+      afterSignup: mailer ? async () => { waitUntil(mailer.drain(2).catch(() => undefined)) } : undefined,
     })
   }
   return productionHandler(request, response)
@@ -155,15 +167,72 @@ export function handleProductionCollect(request: IncomingMessage, response: Serv
   return collectHandler(request, response)
 }
 
-let unsubscribeHandler: ReturnType<typeof createUnsubscribeHandler> | undefined
 
-export function handleUnsubscribe(request: IncomingMessage, response: ServerResponse) {
-  if (!unsubscribeHandler) {
-    const database = productionPool()
-    unsubscribeHandler = createUnsubscribeHandler(async (code) => {
-      if (!database) throw new Error('A database connection is required.')
-      return (await database.query<{ ok: boolean }>('SELECT analytics.unsubscribe($1) AS ok', [code])).rows[0]?.ok === true
-    })
+function json(response: ServerResponse, status: number, body: unknown) {
+  response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+  response.end(JSON.stringify(body))
+}
+
+function authorized(value: string | undefined, secret: string): boolean {
+  if (!value || value.length > 1_024 || Buffer.byteLength(secret) < 32) return false
+  const digest = (text: string) => createHash('sha256').update(text).digest()
+  return timingSafeEqual(digest(value), digest(`Bearer ${secret}`))
+}
+
+/** GET supports Vercel Cron (which sends CRON_SECRET as a Bearer token); POST supports a deliberate drain. */
+export function createEmailWorkerHandler(options: {
+  secret?: string
+  setup: EmailDeliverySetup
+  drain?: () => Promise<unknown>
+}) {
+  return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    if (request.method !== 'GET' && request.method !== 'POST') {
+      response.setHeader('Allow', 'GET, POST')
+      json(response, 405, { ok: false, error: 'Method not allowed.' })
+      return
+    }
+    if (!options.secret || Buffer.byteLength(options.secret) < 32) {
+      json(response, 503, { ok: false, error: 'Email delivery is not configured.' })
+      return
+    }
+    if (!authorized(request.headers.authorization, options.secret)) {
+      json(response, 401, { ok: false, error: 'Unauthorized.' })
+      return
+    }
+    if (options.setup.state !== 'ready' || !options.drain) {
+      json(response, 503, { ok: false, error: 'Email delivery is not configured.' })
+      return
+    }
+    try {
+      const result = await options.drain()
+      json(response, 200, { ok: true, result })
+    } catch {
+      json(response, 503, { ok: false, error: 'Email delivery is temporarily unavailable.' })
+    }
   }
-  return unsubscribeHandler(request, response)
+}
+
+export function handleProductionEmailWorker(request: IncomingMessage, response: ServerResponse) {
+  const setup = readEmailDeliveryConfig()
+  const database = setup.state === 'ready' ? productionPool() : null
+  const mailer = database ? productionMailer(database, setup) : null
+  return createEmailWorkerHandler({
+    secret: setup.state === 'ready' ? setup.config.cronSecret : undefined,
+    setup,
+    drain: mailer ? () => mailer.drain(10) : undefined,
+  })(request, response)
+}
+
+/** Opt-out keeps working while sending is off, as long as the signing secret is unchanged. */
+export function handleProductionUnsubscribe(request: IncomingMessage, response: ServerResponse) {
+  const secret = process.env.WAITLIST_EMAIL_SECRET?.trim() || hashingSecret()
+  const database = productionPool()
+  if (!database) {
+    json(response, 503, { ok: false, error: 'Email preferences are temporarily unavailable.' })
+    return Promise.resolve()
+  }
+  return createUnsubscribeHandler({
+    secret,
+    async unsubscribe(code) { await database.query('SELECT analytics.unsubscribe($1)', [code]) },
+  })(request, response)
 }

@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises'
 import { Pool } from 'pg'
 
 export const BASE_MIGRATIONS = ['../sql/test/supabase-stub.sql', '../sql/001_waitlist.sql']
-export const LATER_MIGRATIONS = ['../sql/002_email_waitlist.sql', '../sql/003_analytics.sql', '../sql/004_api_role.sql', '../sql/005_admin_features.sql']
+export const LATER_MIGRATIONS = ['../sql/002_email_waitlist.sql', '../sql/003_analytics.sql', '../sql/004_api_role.sql', '../sql/005_admin_features.sql',
+  '../sql/006_waitlist_email_delivery.sql', '../sql/007_email_admin.sql']
 
 /** A pool connected as the least-privilege website role, as the hosted API is. */
 export async function connectAsApiRole(database: Pool) {

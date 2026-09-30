@@ -273,14 +273,51 @@ export interface AuditEntry {
   detail: Record<string, unknown>
 }
 
+/**
+ * The welcome email settings. The sender fields and postal address apply to every
+ * waitlist email. `body` is no longer used (the content is a fixed branded template)
+ * but is kept and sent back unchanged.
+ */
 export interface WelcomeEmail {
   enabled: boolean
   from_name: string
   from_email: string
   reply_to: string
   subject: string
-  body: string
+  body?: string
   postal_address: string
+}
+
+/** Sent once, when someone's third invitee joins. Uses the welcome email's sender. */
+export interface PriorityEmail {
+  enabled: boolean
+  subject: string
+}
+
+export type EmailKind = 'welcome' | 'priority'
+
+export interface EmailPreview {
+  kind: EmailKind
+  from: string
+  subject: string
+  html: string
+  text: string
+}
+
+export interface TestEmailResult {
+  sentTo: string
+  kind: EmailKind
+  /** True when the admin has their own signup, so the links in the test work. */
+  realLinks: boolean
+  /** Which sender delivered it: SMTP (primary) or the Resend backup. */
+  via: 'smtp' | 'resend'
+}
+
+export interface SendPendingResult {
+  sent: number
+  retried: number
+  failed: number
+  cancelled: number
 }
 
 export interface SettingValues {
@@ -293,6 +330,7 @@ export interface SettingValues {
   signup_limit_per_hour: number
   signup_limit_per_day: number
   welcome_email: WelcomeEmail
+  priority_email: PriorityEmail
 }
 
 export type SettingKey = keyof SettingValues
@@ -327,10 +365,17 @@ export interface NewAnnotation {
 }
 
 export interface EmailReport {
-  welcome: { sent: number; failed: number; skipped: number }
-  recent_failures: { created_at: string; kind: 'welcome' | 'test'; detail: string | null }[]
+  /** Queue jobs created in the range. skipped is always 0 (kept for older dashboards). */
+  welcome: { sent: number; failed: number; pending: number; cancelled: number; skipped: number }
+  priority: { sent: number; failed: number; pending: number; cancelled: number }
+  /** Everything still queued, regardless of range. */
+  pending_all_time: number
+  oldest_pending_at: string | null
+  tests: { sent: number; failed: number }
+  /** detail is a failure code for queue jobs, free text for tests. */
+  recent_failures: { created_at: string; kind: EmailKind | 'test'; detail: string | null }[]
   unsubscribed: number
   unsubscribed_all_time: number
-  /** Top 25 domains of email signups in range. */
+  /** Top 200 domains of email signups in range. */
   domains: { domain: string; signups: number }[]
 }

@@ -1,14 +1,22 @@
 import { isDisposableEmailDomain } from 'disposable-email-domains-js'
 
 /** Email signup settings edited in the admin dashboard (analytics.settings). */
+/** The welcome email's settings; the sender, reply-to and postal address apply to every waitlist email. */
 export type WelcomeEmail = {
   enabled: boolean
   from_name: string
   from_email: string
   reply_to: string
   subject: string
+  /** Unused since the branded templates in waitlist-email.ts; kept so older settings still validate. */
   body: string
   postal_address: string
+}
+
+/** Sent once when a person's third friend joins. Uses the welcome email's sender settings. */
+export type PriorityEmail = {
+  enabled: boolean
+  subject: string
 }
 
 export type SignupConfig = {
@@ -19,6 +27,7 @@ export type SignupConfig = {
   signup_limit_per_hour: number
   signup_limit_per_day: number
   welcome_email: WelcomeEmail
+  priority_email: PriorityEmail
 }
 
 export const DEFAULT_SIGNUP_CONFIG: SignupConfig = {
@@ -37,6 +46,10 @@ export const DEFAULT_SIGNUP_CONFIG: SignupConfig = {
     body: 'Thanks for joining the Open Swarm waitlist.\n\n{{invite_link}}',
     postal_address: '',
   },
+  priority_email: {
+    enabled: false,
+    subject: 'You’ve unlocked priority early access',
+  },
 }
 
 const text = (value: unknown, fallback: string) => typeof value === 'string' ? value : fallback
@@ -46,6 +59,7 @@ const positive = (value: unknown, fallback: number) => typeof value === 'number'
 export function parseSignupConfig(raw: unknown): SignupConfig {
   const row = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
   const welcome = row.welcome_email && typeof row.welcome_email === 'object' ? row.welcome_email as Record<string, unknown> : {}
+  const priority = row.priority_email && typeof row.priority_email === 'object' ? row.priority_email as Record<string, unknown> : {}
   const defaults = DEFAULT_SIGNUP_CONFIG
   return {
     signups_open: typeof row.signups_open === 'boolean' ? row.signups_open : defaults.signups_open,
@@ -64,6 +78,10 @@ export function parseSignupConfig(raw: unknown): SignupConfig {
       subject: text(welcome.subject, defaults.welcome_email.subject),
       body: text(welcome.body, defaults.welcome_email.body),
       postal_address: text(welcome.postal_address, ''),
+    },
+    priority_email: {
+      enabled: priority.enabled === true,
+      subject: text(priority.subject, defaults.priority_email.subject) || defaults.priority_email.subject,
     },
   }
 }

@@ -1,9 +1,10 @@
 import { useRef, type CSSProperties, type ReactNode } from 'react'
-import { clamp, easeOut, ep, inOut, lerp, popIn, rise, seg, useTimeline } from '../os/kit'
+import { clamp, easeOut, ep, inOut, lerp, popIn, rise, seg } from '../os/kit'
 import { AppIcon } from '../ui/AppIcon'
 import { B } from '@/lib/brands'
 import { cn } from '@/lib/utils'
-import { Ask, Glass, PanelRoot } from './shared'
+import { Ask, Glass, PanelRoot, type PanelProps } from './shared'
+import { usePanelTimeline } from './usePanelTimeline'
 
 /*
   Operations: the Friday reconciliation. The schedule fires, a reading line runs down a
@@ -458,9 +459,9 @@ function Toast({ w, alpha }: { w: number; alpha: number }) {
   )
 }
 
-export function OpsPanel({ prompt }: { prompt: string }) {
+export function OpsPanel({ prompt, previewTime }: PanelProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const t = useTimeline(LOOP, ref, REST)
+  const t = usePanelTimeline(LOOP, ref, REST, previewTime)
   // The run plays on its own clock `w`. At the end it fades out, then the opening frame
   // (w = 0) fades back in, so the last moment of the loop matches the first.
   const w = t < BACK ? t : 0

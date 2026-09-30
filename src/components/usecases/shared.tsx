@@ -1,6 +1,8 @@
 import type { ReactNode, RefObject } from 'react'
 import { cn } from '@/lib/utils'
 
+export type PanelProps = { prompt: string; previewTime?: number }
+
 /*
   Shared pieces for the Use cases panels. Every team gets its own animated view (a lead list,
   a reconciliation table, a hiring pipeline, a research brief) so switching tabs actually

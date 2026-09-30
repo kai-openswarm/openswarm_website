@@ -16,6 +16,7 @@ const G = {
   search: 'research',
   book: 'resources',
   chat: 'conversation',
+  x: 'x',
 } as const
 
 type Item = { label: string; desc: string; href: string; glyph: IconAssetName; external?: boolean; pick?: string }
@@ -49,7 +50,7 @@ const MENUS: Menu[] = [
     label: 'Resources',
     items: [
       { label: 'Community', desc: 'Talk to the team on Discord', href: LINKS.discord, glyph: G.people, external: true },
-      { label: 'Updates', desc: 'Follow Open Swarm on X', href: LINKS.x, glyph: G.chat, external: true },
+      { label: 'Updates', desc: 'Follow Open Swarm on X', href: LINKS.x, glyph: G.x, external: true },
     ],
   },
 ]

@@ -54,13 +54,13 @@ Applied in order in `classifyTraffic` (`server/analytics.ts`): paid (`utm_medium
 
 ## One-time setup
 
-1. **Database.** In the Supabase SQL editor, or with `supabase db query --linked -f <file>`, run `sql/001_waitlist.sql` through `sql/005_admin_features.sql` in order. All are safe to re-run. `003` seeds the four admin emails and schedules the retention job. `004` creates the least-privilege `openswarm_api` role the website connects as; give it a generated password with `ALTER ROLE openswarm_api LOGIN PASSWORD '…'` and use that in `DATABASE_URL`. `005` adds the email signup settings, annotations and the extra dashboard functions.
+1. **Database.** In the Supabase SQL editor, or with `supabase db query --linked -f <file>`, run `sql/001_waitlist.sql` through `sql/007_email_admin.sql` in order. All are safe to re-run. `003` seeds the four admin emails and schedules the retention job. `004` creates the least-privilege `openswarm_api` role the website connects as; give it a generated password with `ALTER ROLE openswarm_api LOGIN PASSWORD '…'` and use that in `DATABASE_URL`. `005` adds the email signup settings, annotations and the extra dashboard functions.
 2. **Auth.** In Supabase → Authentication:
    - Disable "Allow new users to sign up". Admin logins are created by the allowlist, not by visitors.
    - Set the Site URL to `https://openswarm.com` and add `https://openswarm.com/admin/` (plus any preview domain's `/admin/`) to the redirect URLs.
    - Create logins for the four admins (Authentication → Users → Add user → "Send magic link", or invite from the dashboard's Settings page once one admin can sign in).
-   - For reliable sign-in email delivery, configure custom SMTP (for example Resend). Supabase's built-in sender is rate-limited.
-3. **Vercel environment variables** (Production and Preview): `DATABASE_URL` (transaction pooler, port 6543, user `openswarm_api.<project-ref>`), `ANALYTICS_SALT`, `SMTP_HOST`, `SMTP_USER` and `SMTP_PASSWORD` (for welcome emails; `RESEND_API_KEY` is used instead when SMTP is not set), `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`, `VITE_X_SIGNUP_EVENT_ID`, `ALLOWED_ORIGINS`. See `.env.example`.
+   - For reliable sign-in email delivery, configure custom SMTP (for example the Google Workspace noreply mailbox). Supabase's built-in sender is rate-limited.
+3. **Vercel environment variables** (Production and Preview): `DATABASE_URL` (transaction pooler, port 6543, user `openswarm_api.<project-ref>`), `ANALYTICS_SALT`, `SMTP_HOST`, `SMTP_USER` and `SMTP_PASSWORD` (waitlist emails), optionally `RESEND_API_KEY` (backup sender), `CRON_SECRET` (daily email retry), `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `TURNSTILE_SECRET_KEY` + `VITE_TURNSTILE_SITE_KEY`, `VITE_X_SIGNUP_EVENT_ID`, `ALLOWED_ORIGINS`. See `.env.example`.
 4. **Deploy** and check that `/api/stats` returns a count, a page view appears under Real-time, and a test signup shows its channel on the Signups page.
 
 ## Email signup settings
@@ -73,9 +73,13 @@ Admins change these in **Settings → Email signup**; the API reads them at most
 | Blocked domains | Rejects addresses at these domains and their subdomains. |
 | Block disposable email | Rejects about 9,000 known throwaway-email domains (`disposable-email-domains-js`). |
 | Signup limits | New signups allowed per network (hashed IP) per hour and per day. |
-| Welcome email | Sent through Resend after each new signup when enabled. `{{invite_link}}` becomes the person's invite link. An unsubscribe link and the postal address are always appended, with one-click `List-Unsubscribe` headers. Delivery results appear in the Email report. |
+| Sender | Name, from address, reply-to and postal address used by every waitlist email. The from address must be the SMTP mailbox or one of its aliases. |
+| Welcome email | On/off and subject. Queued with each new signup and sent right after it; the content is the branded template in `server/waitlist-email.ts`. |
+| Priority email | On/off and subject. Queued once when a person's third invited friend joins. |
 
-Unsubscribe links (`/api/unsubscribe`) are signed with `ANALYTICS_SALT`, so changing that secret invalidates links in emails already sent. Opening a link shows a confirmation button; mail clients' one-click unsubscribe posts directly. Unsubscribed signups keep their place on the waitlist and are marked with `unsubscribed_at`; any future email sender must skip them.
+Emails use the queue from [the email flow](waitlist-email-flow.md): a signup and its email job commit together, sending happens right after the response, and failures retry with backoff. Anything left over goes out with the next signup, the daily Vercel Cron run, or **Email → Send pending now**. Test sends and previews on the Settings page use the unsaved form and the admin's own waitlist signup, so links in tests are real.
+
+Unsubscribe links (`/api/waitlist/unsubscribe`) are signed with `WAITLIST_EMAIL_SECRET`, or a secret derived from `ANALYTICS_SALT` when that is unset; changing it invalidates links in emails already sent. Opening a link shows a confirmation button; mail clients' one-click unsubscribe posts directly. Unsubscribing sets `email_opted_out_at`, cancels queued emails and keeps the person's place on the waitlist.
 
 ## Advertising pixel
 

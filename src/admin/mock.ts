@@ -5,7 +5,7 @@
 import type { AdminApi } from './api'
 import { ApiError } from './api'
 import type {
-  AdminSettings, Annotation, AuditEntry, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
+  AdminSettings, Annotation, AuditEntry, EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
   Kpis, Overview, Performance, RangeQuery, Realtime, RealtimeEvent, Referrals, SectionKey, SettingValues, SignupRow, TimeseriesPoint, VitalRow, WelcomeEmail,
 } from './types'
 import { NONE } from './types'
@@ -324,7 +324,16 @@ interface MockSignup {
   shares: { at: number; channel: string }[]
   /** Distinct visitors who arrived on this person's invite link. */
   invite_visitors: number
-  welcome: { status: 'sent' | 'failed' | 'skipped'; detail: string | null } | null
+}
+
+/** One row of public.waitlist_email_outbox. */
+interface MockEmailJob {
+  code: string
+  kind: EmailKind
+  status: 'pending' | 'sent' | 'failed' | 'cancelled'
+  created_at: number
+  attempts: number
+  failure_code: string | null
 }
 
 const DAY = 86_400_000
@@ -436,7 +445,7 @@ function buildDataset() {
         const signup: MockSignup = {
           email: legacy ? null : email(rand), phone, code: code(rand), created_at: started_at + Math.round(active_ms * 0.7), placement,
           referred_by, network_hash: code(rand, 22), consent_version: legacy ? null : 'email-2026-09-30', session: s,
-          unsubscribed_at: null, opened: false, shares: [], invite_visitors: 0, welcome: null,
+          unsubscribed_at: null, opened: false, shares: [], invite_visitors: 0,
         }
         signups.push(signup)
         if (chance(rand, 0.4)) referrers.push(signup)
@@ -451,7 +460,7 @@ function buildDataset() {
       const base = signups[signups.length - 1 - Math.floor(rand() * 200)]
       signups.push({
         ...base, email: email(rand), phone: null, consent_version: 'email-2026-09-30', code: code(rand),
-        unsubscribed_at: null, opened: false, shares: [], invite_visitors: 0, welcome: null,
+        unsubscribed_at: null, opened: false, shares: [], invite_visitors: 0,
         created_at: Math.min(now - 60_000, o.created_at + (j + 1) * 3_600_000), referred_by: o.code,
         network_hash: j < 3 ? o.network_hash : code(rand, 22), placement: 'hero', session: null,
       })
@@ -474,18 +483,31 @@ function buildDataset() {
     }))
     x.invite_visitors = shareCount ? n + Math.round(n * (0.8 + r2() * 2.5)) + Math.floor(r2() * 3) : n
     if (chance(r2, 0.018)) x.unsubscribed_at = Math.min(now - 60_000, x.created_at + Math.floor(r2() * 12 * DAY))
-    if (x.email && x.created_at >= welcomeSince) {
-      const status = pick(r2, [['sent', 94], ['failed', 3], ['skipped', 3]] as const)
-      x.welcome = {
-        status,
-        detail: status === 'failed'
-          ? pick(r2, [['Resend 422: The email address is invalid', 2], ['Resend 429: Rate limit exceeded', 1], ['Network timeout after 10s', 1]] as const)
-          : status === 'skipped' ? 'welcome email disabled' : null,
-      }
+  }
+
+  // The email queue: a welcome job per email signup since emails were switched on,
+  // and a priority job when someone's third invitee joined.
+  const jobs: MockEmailJob[] = []
+  const job = (code: string, kind: EmailKind, at: number, unsubscribed: boolean) => {
+    const recent = now - at < 3 * 3_600_000
+    const status = unsubscribed ? 'cancelled' : recent && chance(r2, 0.25) ? 'pending' : pick(r2, [['sent', 95], ['failed', 2], ['pending', 1], ['cancelled', 1]] as const)
+    const failure_code = status === 'failed'
+      ? pick(r2, [['provider_rejected', 3], ['retry_window_exhausted', 2], ['invalid_payload', 1]] as const)
+      : status === 'cancelled' ? 'unsubscribed'
+      : status === 'pending' && chance(r2, 0.5) ? 'delivery_uncertain' : null
+    jobs.push({ code, kind, status, created_at: at, attempts: failure_code && status === 'pending' ? 1 : status === 'sent' ? 1 : 0, failure_code })
+  }
+  const inviteesSoFar = new Map<string, number>()
+  for (const x of signups) {
+    if (x.email && x.created_at >= welcomeSince) job(x.code, 'welcome', x.created_at + 2000, x.unsubscribed_at !== null && x.unsubscribed_at < x.created_at + 60_000)
+    if (x.referred_by) {
+      const c = (inviteesSoFar.get(x.referred_by) ?? 0) + 1
+      inviteesSoFar.set(x.referred_by, c)
+      if (c === 3 && x.created_at >= welcomeSince) job(x.referred_by, 'priority', x.created_at + 3000, false)
     }
   }
 
-  return { sessions, signups }
+  return { sessions, signups, jobs }
 }
 
 // ---------------------------------------------------------------------------
@@ -532,6 +554,38 @@ function countBy<T>(items: T[], key: (t: T) => string) {
   return m
 }
 
+const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c)
+
+/** A rough stand-in for server/waitlist-email.ts, so the preview has something to show. */
+function previewHtml(kind: EmailKind, w: WelcomeEmail) {
+  const link = 'https://openswarm.com/?ref=EXAMPLE-INVITE-CODE'
+  const head = kind === 'priority' ? 'You’ve unlocked priority access' : 'You’re on the list'
+  const lead = kind === 'priority'
+    ? 'Three friends joined with your link, so you’ll be among the first to get Open Swarm.'
+    : 'Thanks for joining the Open Swarm waitlist. We’ll email you when early access opens.'
+  const extra = kind === 'priority' ? '' : `<p style="margin:0 0 16px">Want to move up? Invite 3 friends and unlock priority access.</p>
+    <p style="margin:0 0 24px"><a href="${link}" style="display:inline-block;background:#0a0a0a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:600">Share your invite link</a></p>`
+  return `<!doctype html><html><body style="margin:0;background:#f4f4f2;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#0a0a0a">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
+  <table role="presentation" width="100%" style="max-width:520px;background:#fff;border-radius:16px;padding:32px"><tr><td>
+    <p style="margin:0 0 24px;font-size:18px;font-weight:800">🐙 Open Swarm</p>
+    <h1 style="margin:0 0 12px;font-size:24px;letter-spacing:-0.02em">${head}</h1>
+    <p style="margin:0 0 16px;line-height:1.5;color:#444">${lead}</p>
+    ${extra}
+    <p style="margin:0;color:#444">The Open Swarm team</p>
+  </td></tr></table>
+  <p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#888;line-height:1.5">Don’t want these emails? <a href="#" style="color:#888">Unsubscribe</a>.<br>${esc(w.postal_address || '(postal address not set)')}</p>
+  <p style="font-size:11px;color:#aaa">Mock preview. The real template is rendered by the server.</p>
+  </td></tr></table></body></html>`
+}
+
+function previewText(kind: EmailKind, w: WelcomeEmail) {
+  const body = kind === 'priority'
+    ? 'Three friends joined with your link, so you’ll be among the first to get Open Swarm.'
+    : 'Thanks for joining the Open Swarm waitlist. We’ll email you when early access opens.\n\nWant to move up? Invite 3 friends and unlock priority access:\nhttps://openswarm.com/?ref=EXAMPLE-INVITE-CODE'
+  return `${body}\n\nThe Open Swarm team\n\n--\nUnsubscribe: https://openswarm.com/api/unsubscribe?...\n${w.postal_address || '(postal address not set)'}`
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export function createMockApi(): AdminApi {
@@ -545,6 +599,7 @@ export function createMockApi(): AdminApi {
     block_disposable_email: true,
     signup_limit_per_hour: 10,
     signup_limit_per_day: 40,
+    priority_email: { enabled: false, subject: 'You’ve unlocked priority early access' },
     welcome_email: {
       enabled: false,
       from_name: 'Open Swarm',
@@ -556,6 +611,10 @@ export function createMockApi(): AdminApi {
     },
   }
   const dayStr = (daysAgo: number) => localStamp(Date.now() - daysAgo * DAY).slice(0, 10)
+  const testLog: { created_at: number; status: 'sent' | 'failed'; detail: string }[] = [
+    { created_at: Date.now() - 2 * DAY, status: 'sent', detail: 'welcome' },
+    { created_at: Date.now() - 2 * DAY + 90_000, status: 'failed', detail: 'priority: the SMTP server did not accept the message' },
+  ]
   let annotationId = 4
   const annotations: Annotation[] = [
     { id: 1, starts_on: dayStr(24), ends_on: null, title: 'Product Hunt launch', color: 'orange', created_by: 'kai@openswarm.com', created_at: new Date(Date.now() - 24 * DAY).toISOString() },
@@ -869,6 +928,7 @@ export function createMockApi(): AdminApi {
       if (i < 0) throw new ApiError('Signup not found.', 'P0002')
       const [s] = data.signups.splice(i, 1)
       for (const o of data.signups) if (o.referred_by === c) o.referred_by = null
+      data.jobs = data.jobs.filter((j) => j.code !== c)
       if (s.session) {
         const vid = s.session.visitor_id
         data.sessions = data.sessions.filter((x) => x.visitor_id !== vid)
@@ -1017,6 +1077,12 @@ export function createMockApi(): AdminApi {
         case 'blocked_email_domains':
           if (!Array.isArray(v) || v.length > 500 || v.some((d) => typeof d !== 'string' || !DOMAIN_RE.test(d))) throw bad('Blocked domains must be up to 500 lowercase domain names, such as example.com.')
           break
+        case 'priority_email': {
+          const pe = v as PriorityEmail
+          if (typeof pe?.enabled !== 'boolean' || typeof pe.subject !== 'string' || pe.subject.trim().length < 1 || pe.subject.trim().length > 150) throw bad('The priority email needs enabled and a subject of 1 to 150 characters.')
+          if (pe.enabled && (!settings.welcome_email.from_email || !settings.welcome_email.postal_address.trim())) throw bad('Set the sender and postal address in the welcome email first.')
+          break
+        }
         case 'welcome_email': {
           const w = v as WelcomeEmail
           if (w.enabled && (!w.from_email || !w.postal_address.trim())) throw bad('Set a from address and a postal address before turning the welcome email on.')
@@ -1044,13 +1110,42 @@ export function createMockApi(): AdminApi {
       audited('add_admin', { email: e })
     }, 700),
 
-    testEmail: (w) => delay(() => {
-      if (new URLSearchParams(window.location.search).get('mockresend') === '0') {
-        throw new ApiError('Email sending is not configured: set SMTP_HOST, SMTP_USER and SMTP_PASSWORD, or RESEND_API_KEY.', '503')
-      }
+    testEmail: (kind, w) => delay((): TestEmailResult => {
+      // ?mockresend=0: nothing configured. ?mocksmtp=fail: SMTP refuses, the Resend backup delivers.
+      // ?mocksmtp=reject: both refuse.
+      const qs = new URLSearchParams(window.location.search)
+      const log = (status: 'sent' | 'failed', detail: string) => testLog.unshift({ created_at: Date.now(), status, detail })
+      if (qs.get('mockresend') === '0') throw new ApiError('Email sending is not configured: set SMTP_HOST, SMTP_USER and SMTP_PASSWORD (or RESEND_API_KEY) in Vercel.', '503')
       if (!w.from_email) throw new ApiError('Set a from address first.', '400')
-      return false
+      if (qs.get('mocksmtp') === 'reject') {
+        log('failed', `${kind}: the email server did not accept the message`)
+        throw new ApiError('The email server did not accept the message. Check the SMTP settings, that the sender address is allowed for that account, and the Resend domain verification.', '502')
+      }
+      const via = qs.get('mocksmtp') === 'fail' ? 'resend' : 'smtp'
+      log('sent', kind)
+      return { sentTo: me, kind, realLinks: false, via }
     }, 900),
+
+    emailPreview: (kind, w, p) => delay((): EmailPreview => {
+      const from = `${w.from_name || 'Open Swarm'} <${w.from_email || 'sender@example.com'}>`
+      const subject = kind === 'priority' ? p.subject : w.subject
+      return { kind, from, subject, html: previewHtml(kind, w), text: previewText(kind, w) }
+    }, 250),
+
+    sendPending: () => delay((): SendPendingResult => {
+      const result = { sent: 0, retried: 0, failed: 0, cancelled: 0 }
+      for (const j of data.jobs.filter((x) => x.status === 'pending').slice(0, 20)) {
+        j.attempts++
+        if (j.failure_code === 'delivery_uncertain' && chance(Math.random, 0.3)) result.retried++
+        else {
+          j.status = 'sent'
+          j.failure_code = null
+          result.sent++
+        }
+      }
+      audited('send_pending_emails', { ...result })
+      return result
+    }, 1200),
 
     annotations: (r) => delay(() => {
       const from = localStamp(Date.parse(r.from)).slice(0, 10)
@@ -1078,21 +1173,32 @@ export function createMockApi(): AdminApi {
       const a = Date.parse(r.from)
       const b = Date.parse(r.to)
       const inRange = signupsIn(r.from, r.to)
-      const welcome = inRange.filter((x) => x.welcome)
+      const jobs = data.jobs.filter((j) => j.created_at >= a && j.created_at < b)
+      const counts = (kind: EmailKind) => {
+        const k = jobs.filter((j) => j.kind === kind)
+        const n = (st: MockEmailJob['status']) => k.filter((j) => j.status === st).length
+        return { sent: n('sent'), failed: n('failed'), pending: n('pending'), cancelled: n('cancelled') }
+      }
+      const pendingAll = data.jobs.filter((j) => j.status === 'pending')
+      const tests = testLog.filter((t) => t.created_at >= a && t.created_at < b)
+      const failures = [
+        ...jobs.filter((j) => j.status === 'failed' || (j.status === 'pending' && j.attempts > 0))
+          .map((j) => ({ created_at: j.created_at + 60_000, kind: j.kind as EmailKind | 'test', detail: j.failure_code })),
+        ...tests.filter((t) => t.status === 'failed').map((t) => ({ created_at: t.created_at, kind: 'test' as const, detail: t.detail })),
+      ].sort((x, y) => y.created_at - x.created_at).slice(0, 20)
       return {
-        welcome: {
-          sent: welcome.filter((x) => x.welcome?.status === 'sent').length,
-          failed: welcome.filter((x) => x.welcome?.status === 'failed').length,
-          skipped: welcome.filter((x) => x.welcome?.status === 'skipped').length,
-        },
-        recent_failures: welcome.filter((x) => x.welcome?.status === 'failed').reverse().slice(0, 20)
-          .map((x) => ({ created_at: new Date(x.created_at + 4000).toISOString(), kind: 'welcome' as const, detail: x.welcome?.detail ?? null })),
+        welcome: { ...counts('welcome'), skipped: 0 },
+        priority: counts('priority'),
+        pending_all_time: pendingAll.length,
+        oldest_pending_at: pendingAll.length ? new Date(Math.min(...pendingAll.map((j) => j.created_at))).toISOString() : null,
+        tests: { sent: tests.filter((t) => t.status === 'sent').length, failed: tests.filter((t) => t.status === 'failed').length },
+        recent_failures: failures.map((f) => ({ ...f, created_at: new Date(f.created_at).toISOString() })),
         unsubscribed: data.signups.filter((x) => x.unsubscribed_at !== null && x.unsubscribed_at >= a && x.unsubscribed_at < b).length,
         unsubscribed_all_time: data.signups.filter((x) => x.unsubscribed_at !== null).length,
         domains: [...countBy(inRange.filter((x) => x.email), (x) => x.email!.split('@')[1]).entries()]
           .map(([domain, signups]) => ({ domain, signups }))
           .sort((x, y) => y.signups - x.signups || x.domain.localeCompare(y.domain))
-          .slice(0, 25),
+          .slice(0, 200),
       }
     }),
   }

@@ -4,11 +4,17 @@ The application icons in `public/media/apps/` use original installed application
 
 ## Apple application icons
 
-Messages, FaceTime and Calendar were exported from each installed macOS application's `Contents/Resources/AppIcon.icns`. Safari uses its application bundle's `Contents/Resources/AppIcon.icns`; Finder uses `Finder.app/Contents/Resources/Finder.icns`. Books was exported through macOS `NSWorkspace.icon(forFile:)` to resolve its current application artwork, because its legacy ICNS resource is an empty placeholder.
+Messages, FaceTime and Calendar were exported from each installed macOS application's `Contents/Resources/AppIcon.icns`. Safari uses its application bundle's `Contents/Resources/AppIcon.icns`; Finder uses `Finder.app/Contents/Resources/Finder.icns`.
 
 The exports are 256 × 256 PNGs, retain transparency and the original artwork, and are intended only to identify the corresponding application in the product demo. Apple application names and artwork remain the property of Apple. No endorsement is implied.
 
 The native icon canvases include the original optical padding. The UI may scale these canvases slightly to align their visible bounds with the full-bleed custom app tiles.
+
+## AI application icons
+
+The ChatGPT and Claude sidebar icons were exported from original installed application resources on September 30, 2026. The 256 × 256 PNGs preserve the source artwork and transparent optical padding. ChatGPT uses `ChatGPT.app/Contents/Resources/icon-chatgpt.icns`; Claude uses `Claude.app/Contents/Resources/electron.icns`, the icon selected by its application manifest. The corresponding artwork remains the property of OpenAI and Anthropic.
+
+These two apps replace the Books shortcut in the demo's existing rail. The rail remains centered, and the pointer's app-launcher target follows its new position.
 
 ## Open Swarm application icons
 

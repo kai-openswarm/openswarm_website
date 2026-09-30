@@ -1,7 +1,7 @@
 import { APP_ASSETS, type AppAssetId } from '@/lib/app-assets'
 import { media } from '@/lib/utils'
 
-/** Preserve original artwork; compensate only for Apple's built-in transparent margin. */
+/** Preserve original artwork; compensate only for native app icons' transparent margin. */
 export function DemoAppIcon({ asset, size = 38 }: { asset: AppAssetId; size?: number }) {
   const app = APP_ASSETS[asset]
   const native = app.kind === 'native'

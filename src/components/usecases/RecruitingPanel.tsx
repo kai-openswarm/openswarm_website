@@ -1,9 +1,10 @@
 import { useRef, type CSSProperties } from 'react'
-import { clamp, easeInOut, ep, lerp, popIn, seg, useTimeline } from '../os/kit'
+import { clamp, easeInOut, ep, lerp, popIn, seg } from '../os/kit'
 import { AppIcon } from '../ui/AppIcon'
 import { B } from '@/lib/brands'
 import { cn } from '@/lib/utils'
-import { Ask, Glass, PanelRoot, Spinner } from './shared'
+import { Ask, Glass, PanelRoot, Spinner, type PanelProps } from './shared'
+import { usePanelTimeline } from './usePanelTimeline'
 
 /*
   Recruiting, shown as a hiring pipeline. Applicants from Greenhouse are read one at a time;
@@ -239,9 +240,9 @@ function Swap({ items, className }: { items: [number, React.ReactNode][]; classN
 
 /* ---------- the panel ---------- */
 
-export function RecruitingPanel({ prompt }: { prompt: string }) {
+export function RecruitingPanel({ prompt, previewTime }: PanelProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const t = useTimeline(LOOP, ref, REST)
+  const t = usePanelTimeline(LOOP, ref, REST, previewTime)
 
   const W = 1 - ep(t, OUT, OUT + 0.5) // the work itself fades out at the end
   const tt = t >= DIP ? 0 : t // counters and status read this, so they come back as at t=0

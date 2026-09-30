@@ -42,6 +42,8 @@ The 21st.dev SVGL search connector returned no results for the three requested n
 | `chrome.svg` | [Upstream SVG](https://raw.githubusercontent.com/pheralb/svgl/main/static/library/chrome.svg) |
 | `notion.svg` | [Upstream SVG](https://raw.githubusercontent.com/pheralb/svgl/main/static/library/notion.svg) |
 
+The Resources menu's Updates link uses the X brand mark from the installed `simple-icons` package (`siX`, source: [X](https://x.com)), saved as `public/media/icons/x.svg` without path edits on September 30, 2026. Simple Icons is distributed under CC0; the X name and mark remain the property of their owner. This mark identifies the actual destination of the link.
+
 ## Interface utility icons
 
 Chevron, arrow, menu and close controls continue to use the installed Lucide React library. These standard functional symbols are kept separate from the illustrative menu artwork.

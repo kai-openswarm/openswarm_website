@@ -6,6 +6,7 @@ import { getSupabase } from './supabase'
 import type {
   AdminSettings, Annotation, Bucket, BreakdownRow, Dimension, EmailReport, Engagement, ExportRow, Funnel, NewAnnotation, Overview,
   Performance, Range, RangeQuery, Realtime, Referrals, SettingKey, SettingValues, SignupsPage, TimeseriesPoint, WelcomeEmail, Whoami,
+  EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult,
 } from './types'
 
 export interface AdminApi {
@@ -33,9 +34,12 @@ export interface AdminApi {
   removeAdmin(email: string): Promise<void>
   /** Adds the email to the allowlist and creates its login (POST /api/admin/invite). */
   inviteAdmin(email: string): Promise<void>
-  /** Sends the given (possibly unsaved) welcome email to the signed-in admin (POST /api/admin/test-email). */
-  /** Resolves true when the test used the admin's own waitlist signup (real invite and unsubscribe links). */
-  testEmail(welcome: WelcomeEmail): Promise<boolean>
+  /** Sends one email kind, as set in the (possibly unsaved) form, to the signed-in admin (SMTP, with Resend as a backup). */
+  testEmail(kind: EmailKind, welcome: WelcomeEmail, priority: PriorityEmail): Promise<TestEmailResult>
+  /** Renders an email exactly as recipients get it. Sends nothing. */
+  emailPreview(kind: EmailKind, welcome: WelcomeEmail, priority: PriorityEmail): Promise<EmailPreview>
+  /** Sends queued waitlist emails now instead of waiting for the next signup or the daily retry. */
+  sendPending(): Promise<SendPendingResult>
   annotations(r: Range): Promise<Annotation[]>
   addAnnotation(a: NewAnnotation): Promise<number>
   deleteAnnotation(id: number): Promise<void>
@@ -102,7 +106,18 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     updateSetting: (key, value) => rpc<void>('admin_update_setting', { p_key: key, p_value: value }),
     removeAdmin: (email) => rpc('admin_remove_admin', { p_email: email }),
     inviteAdmin: async (email) => { await postAdmin('/api/admin/invite', { email }, 'Invite failed') },
-    testEmail: async (welcome) => (await postAdmin('/api/admin/test-email', { welcome_email: welcome }, 'Test email failed')).realLinks === true,
+    testEmail: async (kind, welcome, priority) => {
+      const b = await postAdmin('/api/admin/test-email', { kind, welcome_email: welcome, priority_email: priority }, 'Test email failed')
+      return { sentTo: String(b.sentTo ?? ''), kind: b.kind === 'priority' ? 'priority' : 'welcome', realLinks: b.realLinks === true, via: b.via === 'resend' ? 'resend' : 'smtp' }
+    },
+    emailPreview: async (kind, welcome, priority) => {
+      const b = await postAdmin('/api/admin/email-preview', { kind, welcome_email: welcome, priority_email: priority }, 'Preview failed')
+      return { kind: b.kind === 'priority' ? 'priority' : 'welcome', from: String(b.from ?? ''), subject: String(b.subject ?? ''), html: String(b.html ?? ''), text: String(b.text ?? '') }
+    },
+    sendPending: async () => {
+      const r = ((await postAdmin('/api/admin/send-pending', {}, 'Sending failed')).result ?? {}) as Partial<SendPendingResult>
+      return { sent: Number(r.sent ?? 0), retried: Number(r.retried ?? 0), failed: Number(r.failed ?? 0), cancelled: Number(r.cancelled ?? 0) }
+    },
     annotations: (r) => rpc('admin_annotations', { p_from: r.from, p_to: r.to }),
     addAnnotation: (a) => rpc('admin_add_annotation', { p_starts_on: a.starts_on, p_ends_on: a.ends_on, p_title: a.title, p_color: a.color }),
     deleteAnnotation: (id) => rpc('admin_delete_annotation', { p_id: id }),

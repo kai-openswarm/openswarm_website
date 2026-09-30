@@ -33,6 +33,8 @@ export type SignupContext = {
   consentVersion?: string
   networkHash?: string
   fallback?: Record<string, string | null>
+  /** Which waitlist emails to queue with this signup (set from the admin email settings). */
+  emailEvents?: { welcome: boolean, priority: boolean }
 }
 
 export type WaitlistStore = {
@@ -51,7 +53,9 @@ export type WaitlistOptions = {
   context?(request: IncomingMessage): SignupContext
   /** Admin-editable signup settings: open/paused, blocked domains, limits, welcome email. */
   config?(): Promise<SignupConfig>
-  /** Runs after a new signup is stored and before the response, e.g. the welcome email. Never fails the signup. */
+  /** Which waitlist emails to queue with a new signup, from the current settings. */
+  emailEvents?(config: SignupConfig): { welcome: boolean, priority: boolean }
+  /** Runs after a new signup is stored and before the response, e.g. scheduling email delivery. Never fails the signup. */
   afterSignup?(signup: { email: string, referral: ReferralStatus, config: SignupConfig }, request: IncomingMessage): Promise<void>
 }
 
@@ -291,6 +295,7 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
         ...(typeof visitorId === 'string' && UUID.test(visitorId) ? { visitorId: visitorId.toLowerCase() } : {}),
         ...(typeof sessionId === 'string' && UUID.test(sessionId) ? { sessionId: sessionId.toLowerCase() } : {}),
         ...(typeof consentVersion === 'string' && CONSENT_VERSION.test(consentVersion) ? { consentVersion } : {}),
+        ...(config && options.emailEvents ? { emailEvents: options.emailEvents(config) } : {}),
       }
       const { added, referral } = await store.add(email, rawSource.trim(), referralCode, context)
       if (added && config && options.afterSignup) {

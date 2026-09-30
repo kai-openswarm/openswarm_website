@@ -1,9 +1,10 @@
 import { useRef, type CSSProperties } from 'react'
-import { clamp, ep, inOut, lerp, popIn, rise, seg, useTimeline } from '../os/kit'
+import { clamp, ep, inOut, lerp, popIn, rise, seg } from '../os/kit'
 import { AppIcon } from '../ui/AppIcon'
 import { B, type Brand } from '@/lib/brands'
 import { cn } from '@/lib/utils'
-import { Ask, Glass, PanelRoot } from './shared'
+import { Ask, Glass, PanelRoot, type PanelProps } from './shared'
+import { usePanelTimeline } from './usePanelTimeline'
 
 /*
   Research: the swarm reads a month of papers and writes the brief as it goes. Sources stream
@@ -59,9 +60,9 @@ const BLUE = '#2383e2'
 const GREEN = '#1f9d55'
 const blue = (a: number) => `rgba(35,131,226,${a})`
 
-export function ResearchPanel({ prompt }: { prompt: string }) {
+export function ResearchPanel({ prompt, previewTime }: PanelProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const t = useTimeline(LOOP, ref, REST)
+  const t = usePanelTimeline(LOOP, ref, REST, previewTime)
   const live = 1 - ep(t, OUT, OUT + 0.7)
   const count = Math.min(TOTAL, Math.floor(TOTAL * seg(t, C0, C1)))
   const fill = seg(t, C0, C1)

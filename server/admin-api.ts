@@ -1,9 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Pool } from 'pg'
-import { publicOrigin, sendWelcomeEmail, unsubscribeUrl } from './email.ts'
-import { RequestError, header, originAllowed, readBody, respond } from './http.ts'
-import { productionPool } from './production-waitlist.ts'
+import { emailPublicUrl } from './email-delivery.ts'
+import type { EmailKind } from './email-outbox.ts'
+import { RequestError, hashingSecret, header, originAllowed, readBody, respond } from './http.ts'
+import { productionMailer, productionPool } from './production-waitlist.ts'
 import { parseSignupConfig } from './signup-config.ts'
+import { createWaitlistMailer, renderWaitlistPayload } from './waitlist-mailer.ts'
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
@@ -70,25 +72,65 @@ export function createAdminInviteHandler(deps: AdminDeps) {
   })
 }
 
-/** Sends the (possibly unsaved) welcome email template to the signed-in admin. */
-export function createTestEmailHandler(deps: AdminDeps, send: typeof sendWelcomeEmail = sendWelcomeEmail) {
-  return adminEndpoint(deps, 'The test email could not be sent. Please try again.', async ({ caller, input, request }) => {
-    const template = parseSignupConfig({ welcome_email: input.welcome_email }).welcome_email
-    if (!template.from_email) throw new RequestError(400, 'Set a from address first.')
-    const origin = publicOrigin(request)
-    // Use the admin's own waitlist signup when there is one, so every link in the test works.
-    const own = (await deps.database.query<{ referral_code: string }>(
-      'SELECT referral_code FROM waitlist_signups WHERE email = $1', [caller],
-    )).rows[0]?.referral_code
-    const code = own ?? 'x'.repeat(32)
-    const sample = own ? template : {
-      ...template,
-      body: `${template.body}\n\n(Test email: ${caller} isn't on the waitlist, so the invite and unsubscribe links above are samples. Join the waitlist with this address to test real links.)`,
+type Mailer = Pick<ReturnType<typeof createWaitlistMailer>, 'sendTest' | 'drain'>
+
+/** Email settings from the dashboard form, which may be unsaved. */
+function formConfig(input: Record<string, unknown>) {
+  return parseSignupConfig({ welcome_email: input.welcome_email, priority_email: input.priority_email })
+}
+
+function emailKind(input: Record<string, unknown>): EmailKind {
+  return input.kind === 'priority' ? 'priority' : 'welcome'
+}
+
+/** The admin's own waitlist signup, so test emails carry working invite and unsubscribe links. */
+async function ownSignup(database: AdminDeps['database'], email: string) {
+  return (await database.query<{ referral_code: string }>(
+    'SELECT referral_code FROM waitlist_signups WHERE email = $1', [email],
+  )).rows[0]?.referral_code
+}
+
+/** Sends the welcome or priority email, as currently set in the form, to the signed-in admin. */
+export function createTestEmailHandler(deps: AdminDeps, mailer: Mailer | null) {
+  return adminEndpoint(deps, 'The test email could not be sent. Please try again.', async ({ caller, input }) => {
+    if (!mailer) throw new RequestError(503, 'Email sending is not configured: set SMTP_HOST, SMTP_USER and SMTP_PASSWORD (or RESEND_API_KEY) in Vercel.')
+    const config = formConfig(input)
+    if (!config.welcome_email.from_email) throw new RequestError(400, 'Set a from address first.')
+    const kind = emailKind(input)
+    const own = await ownSignup(deps.database, caller)
+    let via: 'smtp' | 'resend'
+    try {
+      const sent = await mailer.sendTest(kind, own ?? 'x'.repeat(32), caller, config)
+      via = sent.id.startsWith('resend:') ? 'resend' : 'smtp'
+      await deps.database.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [own ?? null, 'test', 'sent', sent.id, `${kind} via ${via}`])
+    } catch {
+      await deps.database.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [own ?? null, 'test', 'failed', null, `${kind}: the SMTP server did not accept the message`])
+      throw new RequestError(502, 'Neither email sender accepted the message. Check the SMTP settings, that the sender address is allowed for that mailbox, and (for the Resend backup) that its domain is verified in Resend.')
     }
-    const result = await send({ ...sample, subject: `[Test] ${template.subject}` }, caller, new URL(`/?ref=${code}`, origin).toString(), unsubscribeUrl(origin, code))
-    await deps.database.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [own ?? null, 'test', result.status, result.providerId ?? null, result.detail ?? null])
-    if (result.status !== 'sent') throw new RequestError(502, result.detail ?? 'The email provider rejected the message.')
-    return { ok: true, sentTo: caller, realLinks: !!own }
+    // via tells the admin whether the Resend backup had to step in.
+    return { ok: true, sentTo: caller, kind, realLinks: !!own, via }
+  })
+}
+
+/** Renders an email exactly as recipients get it, for the dashboard preview. Sends nothing. */
+export function createEmailPreviewHandler(deps: AdminDeps, links: () => { publicUrl: string, secret: string }) {
+  return adminEndpoint(deps, 'The preview could not be rendered.', async ({ caller, input }) => {
+    const config = formConfig(input)
+    const kind = emailKind(input)
+    const own = await ownSignup(deps.database, caller)
+    const preview = renderWaitlistPayload(kind, own ?? 'x'.repeat(32), caller,
+      { ...config, welcome_email: { ...config.welcome_email, from_email: config.welcome_email.from_email || 'sender@example.com' } }, links())
+    return { ok: true, kind, from: preview.from, subject: preview.subject, html: preview.html, text: preview.text }
+  })
+}
+
+/** Sends queued waitlist emails now instead of waiting for the next signup or the daily run. */
+export function createSendPendingHandler(deps: AdminDeps, mailer: Mailer | null) {
+  return adminEndpoint(deps, 'Queued emails could not be sent. Please try again.', async ({ caller }) => {
+    if (!mailer) throw new RequestError(503, 'Email sending is not configured: set SMTP_HOST, SMTP_USER and SMTP_PASSWORD (or RESEND_API_KEY) in Vercel.')
+    const result = await mailer.drain(20)
+    await deps.database.query('SELECT analytics.audit($1, $2, $3::jsonb)', [caller, 'send_pending_emails', JSON.stringify(result)])
+    return { ok: true, result }
   })
 }
 
@@ -101,7 +143,7 @@ function productionDeps(): AdminDeps | null {
 }
 
 let inviteHandler: ReturnType<typeof createAdminInviteHandler> | undefined
-let testEmailHandler: ReturnType<typeof createTestEmailHandler> | undefined
+let emailHandlers: { test: ReturnType<typeof createTestEmailHandler>, preview: ReturnType<typeof createEmailPreviewHandler>, pending: ReturnType<typeof createSendPendingHandler> } | undefined
 
 export function handleAdminInvite(request: IncomingMessage, response: ServerResponse) {
   const deps = inviteHandler ? null : productionDeps()
@@ -113,12 +155,34 @@ export function handleAdminInvite(request: IncomingMessage, response: ServerResp
   return inviteHandler(request, response)
 }
 
-export function handleTestEmail(request: IncomingMessage, response: ServerResponse) {
-  const deps = testEmailHandler ? null : productionDeps()
-  if (!testEmailHandler && !deps) {
-    respond(response, 503, { ok: false, error: 'Admin actions are not configured.' })
-    return Promise.resolve()
+function adminEmailHandlers() {
+  if (emailHandlers) return emailHandlers
+  const deps = productionDeps()
+  if (!deps) return null
+  const mailer = productionMailer(deps.database as Pool)
+  const links = () => ({
+    publicUrl: emailPublicUrl() ?? 'https://openswarm.com',
+    secret: process.env.WAITLIST_EMAIL_SECRET?.trim() || hashingSecret(),
+  })
+  emailHandlers = {
+    test: createTestEmailHandler(deps, mailer),
+    preview: createEmailPreviewHandler(deps, links),
+    pending: createSendPendingHandler(deps, mailer),
   }
-  testEmailHandler ??= createTestEmailHandler(deps!)
-  return testEmailHandler(request, response)
+  return emailHandlers
 }
+
+function withEmailHandler(pick: (handlers: NonNullable<typeof emailHandlers>) => (request: IncomingMessage, response: ServerResponse) => Promise<void>) {
+  return (request: IncomingMessage, response: ServerResponse) => {
+    const handlers = adminEmailHandlers()
+    if (!handlers) {
+      respond(response, 503, { ok: false, error: 'Admin actions are not configured.' })
+      return Promise.resolve()
+    }
+    return pick(handlers)(request, response)
+  }
+}
+
+export const handleTestEmail = withEmailHandler((handlers) => handlers.test)
+export const handleEmailPreview = withEmailHandler((handlers) => handlers.preview)
+export const handleSendPending = withEmailHandler((handlers) => handlers.pending)

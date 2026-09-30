@@ -8,6 +8,9 @@ The production API stores email signups in PostgreSQL while retaining legacy pho
 | --- | --- |
 | `api/waitlist.ts` | Vercel Node handler for `POST /api/waitlist` |
 | `api/waitlist/referral.ts` | Vercel Node handler for `GET /api/waitlist/referral?code=…` |
+| `api/waitlist/email-worker.ts` | Authenticated retry worker for queued emails |
+| `api/waitlist/unsubscribe.ts` | Signed preference page and opt-out endpoint |
+| `sql/006_waitlist_email_delivery.sql`, `sql/007_email_admin.sql` | Durable email queue, opt-out metadata, and its dashboard settings, reporting and API-role access |
 | `server/production-waitlist.ts` | Shared connection pool, hosted request adapter and safe failure handling |
 | `server/postgres-waitlist.ts` | PostgreSQL implementation of the email waitlist store |
 | `sql/001_waitlist.sql` | Original table, referral constraints and private RLS configuration |
@@ -34,7 +37,7 @@ The adapter accepts raw Node request streams and Vercel's pre-parsed JSON while 
 
 2. Migration 002 adds a nullable email column, preserves unique phone values, and moves the primary key to the existing unique referral code so new entries can omit a phone. A check requires exactly one contact type. Canonical emails are unique; referral foreign keys, first-attribution data, timestamps, source values, code uniqueness, no-self-referral checks and RLS stay intact. No record is deleted or matched across contact types. The original phone API can still insert valid legacy rows during the migration-first deployment transition.
 3. Set the hosting project's server-only `DATABASE_URL`; never prefix credentials with `VITE_`. Use the provider's pooled/TLS connection string where applicable. The server uses the table owner or an explicitly configured private server role and matching RLS policy; browser/anonymous credentials must not access this table.
-4. Deploy the repository root, including `api/`, `server/`, `sql/` and dependencies. The [preview deployment script](deploy-preview.md) stages the full project and checks both Node functions. Deploying `dist/` alone omits the API.
+4. Deploy the repository root, including `api/`, `server/`, `sql/` and dependencies. The [preview deployment script](deploy-preview.md) stages the full project and checks all four Node functions. Deploying `dist/` alone omits the API.
 5. Set `VITE_PUBLIC_SITE_URL` if invite links need a canonical origin, then rebuild the frontend.
 6. Before opening public collection, verify a reserved email signup, a case/space variant, an invitation from a legacy code, exactly-three progress and an old phone request returning 400. Remove only known test records through the database administrator afterward.
 
@@ -48,7 +51,7 @@ New PostgreSQL inserts use `ON CONFLICT (email) DO NOTHING`. The following READ 
 
 Progress counts attributed rows by referral code, including both old phone records and email records. Three unique attributed records set `priorityAccess: true`. Responses contain only code, count, goal and eligibility; contacts, database errors and credentials never appear in public responses.
 
-This records eligibility only. Email delivery, ownership verification and product account activation are not connected. A new email cannot be automatically linked to an old phone signup without proving that they identify the same person.
+The optional [email flow](waitlist-email-flow.md) sends a signup confirmation and one priority email at the third referral. It requires migration 003, configured server-only delivery settings, and an authenticated retry schedule; it is disabled by default. Ownership verification and product account activation are not connected. A new email cannot be automatically linked to an old phone signup without proving that they identify the same person.
 
 ## Tests and verification limits
 
@@ -56,8 +59,10 @@ This records eligibility only. Email delivery, ownership verification and produc
 node --experimental-strip-types --test server/*.test.ts
 ```
 
-The current isolated suite passes **29 tests**, with one live PostgreSQL test explicitly skipped. It covers email normalization, legacy phone validation, local durability and mixed-contact referral persistence, concurrency, privacy, SQL parameter binding, transaction rollback/release, duplicate handling, code collision recovery and hosted error behavior.
+The isolated suite covers the signup and email flow. Its embedded SQL and live PostgreSQL checks are opt-in, and report explicit skips when their test environments are absent. It covers email normalization, legacy phone validation, local durability and mixed-contact referral persistence, concurrency, privacy, SQL parameter binding, transaction rollback/release, duplicate handling, code collision recovery and hosted error behavior.
 
 An isolated temporary PGlite audit executed the actual 001 and 002 migrations with synthetic legacy records. Legacy values, repeat-migration idempotency, mixed-contact exactly-three referral progress, case/space deduplication, immutable attribution, actual share-code collision rollback/retry, plus/dot addresses, RLS and 20 invalid/duplicate/foreign-key constraint cases passed. The package and in-memory database were isolated under `/tmp`; no application dependency, real signup file or live database was used. This embedded engine verifies SQL behavior on one connection, not hosted network/TLS setup or multi-connection concurrency.
 
-The opt-in live PostgreSQL integration suite applies 001, inserts legacy fixtures, applies 002 twice, checks preserved values, mixed-contact referrals, concurrent duplicate emails and RLS, then removes only its UUID-named schema. Use an isolated test database with schema-creation permission. That suite was not run for this update, so hosted network/TLS and real multi-connection behavior remain unverified against a live PostgreSQL instance.
+The opt-in live PostgreSQL integration suite applies 001, inserts legacy fixtures, applies 002 twice, checks preserved values, mixed-contact referrals, concurrent duplicate emails and RLS, then applies migration 003 and checks queued emails, concurrent milestone signups and competing worker claims before removing only its UUID-named schema. Use an isolated test database with schema-creation permission. That suite was not run for this update, so hosted network/TLS and real multi-connection behavior remain unverified against a live PostgreSQL instance.
+
+The email update additionally runs the actual migrations and outbox queries in a temporary PGlite database. See [email verification and limits](waitlist-email-flow.md#verification) for details. No live database migration or inbox send was performed.

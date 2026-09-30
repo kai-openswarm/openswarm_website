@@ -5,12 +5,12 @@ The marketing website for [Open Swarm](https://openswarm.com), a free AI desktop
 <table>
   <tr><th>Desktop demo</th><th>Mobile demo</th></tr>
   <tr>
-    <td width="68%"><img src="docs/preview-demo-desktop-2026-09-30.jpg" alt="Desktop demo with a slimmer translucent sidebar, lighter wallpaper, blue-gray glass panels, and authentic application icons" /></td>
+    <td width="68%"><img src="docs/preview-demo-desktop-2026-09-30.jpg" alt="Desktop demo with a slimmer translucent sidebar, lighter wallpaper, blue-gray glass panels, and authentic application icons, including ChatGPT and Claude in the sidebar" /></td>
     <td width="32%"><img src="docs/preview-demo-mobile-2026-09-30.jpg" alt="Mobile demo showing the blue-gray glass app launcher over lighter wallpaper, with authentic Apple and Open Swarm artwork" /></td>
   </tr>
 </table>
 
-The current demo uses a slimmer translucent rail, lighter wallpaper, and blue-gray glass panels. The desktop (1280px) and mobile (390px) views show the launcher at 11.8 seconds. See [the glass and app-icon refinement](docs/demo-glass-refinement.md) and [asset provenance](docs/app-assets.md).
+The current demo uses a slimmer translucent rail with authentic ChatGPT and Claude icons, lighter wallpaper, and blue-gray glass panels. The desktop (1280px) and mobile (390px) views show the launcher at 11.8 seconds. See [the glass and app-icon refinement](docs/demo-glass-refinement.md) and [asset provenance](docs/app-assets.md).
 
 <details>
 <summary>View the current illustrated footer</summary>
@@ -22,15 +22,16 @@ The current demo uses a slimmer translucent rail, lighter wallpaper, and blue-gr
 ## What's included
 
 - Responsive landing page with product capabilities, four team use cases, an agent marketplace, and mobile navigation.
-- React-based product animations with reduced-motion support, off-screen pausing, and a development scene viewer.
+- React-based product animations with reduced-motion support, off-screen pausing, and a development scene viewer. Use-case app icons select a step in the demonstration, with hover/focus feedback and a Replay control.
 - Email signup with shared form/API validation and duplicate detection.
 - Personal invite links and referral progress. Three unique referred signups earn priority waitlist eligibility.
 - Local JSON storage for development, plus Node API handlers and PostgreSQL (Supabase) migrations for hosted signups.
 - First-party analytics (traffic sources, campaigns, audience, section reach, scroll depth, signup funnel, referrals, Web Vitals, errors) and a private admin dashboard at `/admin/`. See [analytics](docs/analytics.md).
+- Branded welcome and priority-unlocked emails sent through SMTP, with a durable send queue, retries and signed one-click unsubscribe. Sender, subjects and on/off switches are managed in the admin dashboard. [Preview the emails](docs/email-preview/index.html) or read the [email flow](docs/waitlist-email-flow.md).
 - A recorded consent version per signup, Privacy and Terms pages, and an advertising opt-out that also honors Global Privacy Control.
 - Signup protection: origin checks, per-network rate limits, and optional Cloudflare Turnstile.
 
-The product scenes are visual demonstrations. Marketplace actions lead to the waitlist. Priority eligibility is recorded by the backend; email delivery, email ownership verification, and product account activation are not implemented.
+The product scenes are visual demonstrations. Marketplace actions lead to the waitlist. Priority eligibility is recorded by the backend. Email delivery is implemented as a server-only opt-in and is disabled by default; email ownership verification and product account activation are not implemented.
 
 ## Quick start
 
@@ -53,6 +54,8 @@ Local signup works without environment variables or a database. Its first succes
 | `npm run build` | Type-check the app and server implementation, then build the frontend into `dist/` |
 | `npm run preview` | Serve the built frontend with the local waitlist API at `http://localhost:4173` by default |
 | `npm run lint` | Run oxlint |
+| `npm run email:preview` | Open the email gallery at `http://localhost:4312` with synthetic data; sends nothing |
+| `npm run email:build` | Export email HTML, plain text, and the gallery into `docs/email-preview/` |
 | `node --experimental-strip-types --test server/*.test.ts` | Run email, waitlist, retained phone-record validation, analytics, and hosted handler tests |
 
 Run `npm run build` before `npm run preview`. The preview command is for local verification; hosted signups need the API and database described below.
@@ -75,13 +78,17 @@ cp .env.example .env.local
 | `DATABASE_URL` | Hosted API | Server-only Postgres connection string. For Supabase, use the transaction pooler (port 6543) |
 | `ANALYTICS_SALT` | Hosted API | Server-only secret for hashing client IPs used in rate limits; IPs are never stored |
 | `SUPABASE_SERVICE_ROLE_KEY` | Hosted API | Server-only key used by `/api/admin/invite` to create admin logins |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Hosted API | Optional; sends the welcome email configured in the dashboard through this SMTP server (port defaults to 587) |
-| `RESEND_API_KEY` | Hosted API | Optional; sends the welcome email through Resend when SMTP is not set |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Hosted API | Sends waitlist emails through this SMTP server (port defaults to 587). What is sent is set in the dashboard |
+| `RESEND_API_KEY` | Hosted API | Optional backup sender, used when SMTP definitely did not accept a message; the sender's domain must be verified in Resend |
+| `CRON_SECRET` | Hosted API | Optional; authorizes the daily email retry run from Vercel Cron |
+| `WAITLIST_EMAIL_SECRET`, `WAITLIST_EMAIL_PUBLIC_URL` | Hosted API | Optional overrides for the unsubscribe signing secret and the site URL used in email links |
 | `TURNSTILE_SECRET_KEY` | Hosted API | Optional; when set, signups require a valid Turnstile token |
 | `ALLOWED_ORIGINS` | Hosted API | Optional comma-separated extra origins allowed to POST to the API |
 | `TEST_DATABASE_URL` | Test runner | Optional PostgreSQL server where the live integration tests may create and drop databases |
 
 `VITE_` variables are public and embedded at build time. Restart development after changing them, or rebuild for deployment. Keep database credentials in server-only variables. Setting `DATABASE_URL` does not switch the local Vite waitlist to PostgreSQL.
+
+Waitlist email needs only the `SMTP_*` settings; switch emails on and edit the sender and subjects in the dashboard. See the [email flow](docs/waitlist-email-flow.md). Local Vite signups never send email.
 
 For end-to-end local referral checks, open `http://localhost:4310/?ref=<code>` using a code returned by the local API. Generated share links use the configured public origin and do not automatically point back to localhost.
 
@@ -113,11 +120,11 @@ Deploy the **repository root**, including `api/`, `server/`, and dependencies. U
 
 The included hosted entry points target Vercel's Node runtime. Before collecting hosted signups:
 
-1. In Supabase, deliberately apply the migrations in [sql/](sql/) in order, `001` through `005`, then set a password for the `openswarm_api` role (see [analytics setup](docs/analytics.md#one-time-setup)).
+1. In Supabase, deliberately apply the migrations in [sql/](sql/) in order, `001` through `007`, then set a password for the `openswarm_api` role (see [analytics setup](docs/analytics.md#one-time-setup)).
 2. Configure Supabase Auth for the admin dashboard as described in [analytics setup](docs/analytics.md#one-time-setup).
-3. Set the hosting project's server-only variables and the frontend variables above.
-4. Build and deploy the frontend together with all API routes. [vercel.json](vercel.json) holds the routing and security headers.
-5. Verify signup, duplicate handling, an invited signup, referral progress, `/api/stats`, and that a visit appears on the dashboard's Real-time page.
+3. Set the hosting project's server-only variables and the frontend variables above, including the `SMTP_*` settings for waitlist email.
+4. Build and deploy the frontend together with all API routes. [vercel.json](vercel.json) holds the routing, security headers and the daily email retry schedule.
+5. Verify signup, duplicate handling, an invited signup, referral progress, `/api/stats`, and that a visit appears on the dashboard's Real-time page. Then send test emails from the dashboard before switching waitlist emails on.
 
 Follow [hosted waitlist setup](docs/production-waitlist.md) for migration commands and database access requirements. Deployment does not automatically migrate the database or import local `.data/` records.
 
@@ -137,16 +144,16 @@ After configuring the intended preview project's database and authenticating the
 sh scripts/deploy-preview.sh my-preview-project review
 ```
 
-The script checks for `DATABASE_URL`, builds the project, verifies both Node API function bundles, and deploys to the **Production environment of the named preview project**. It applies `noindex`, so use a dedicated preview project. See [preview deployment](docs/deploy-preview.md) for scope selection and prerequisites.
+The script checks for `DATABASE_URL`, builds the project, verifies all four Node API function bundles, and deploys to the **Production environment of the named preview project**. It applies `noindex`, so use a dedicated preview project. See [preview deployment](docs/deploy-preview.md) for scope selection and prerequisites.
 
 ## Project structure
 
 ```text
 admin/index.html            Admin dashboard page (served at /admin/)
-api/                        Hosted signup, referral, stats, analytics and admin-invite handlers
+api/                        Hosted signup, referral, stats, analytics, email worker, unsubscribe and admin handlers
 privacy/, terms/            Privacy Policy and Terms pages
-server/                     Stores, analytics ingestion, middleware, and tests
-sql/                        Waitlist schema, email migration, and analytics/admin migration
+server/                     Stores, analytics ingestion, email queue and templates, middleware, and tests
+sql/                        Waitlist schema, email contacts, analytics/admin, API role and email queue migrations
 src/
   App.tsx                   Page composition and navigation behavior
   main.tsx                  Entry point and development-only scene viewer
@@ -161,6 +168,7 @@ src/
   lib/                      Email/referral helpers, legacy phone validation, links, brands, analytics, and ad tracking
 public/                     Favicon, illustrations, logos, and icon licenses
 scripts/deploy-preview.sh   Complete preview packaging and deployment
+scripts/preview-emails.ts   Email gallery and HTML/plain-text exports
 docs/                       Setup guides, design notes, and verification records
 ```
 
@@ -209,7 +217,7 @@ The repository contains the hosted backend implementation. A GitHub push alone d
 Items to confirm before a public launch:
 
 - Connect the intended hosting project and migrated database, and verify the hosted signup/referral flow.
-- Have counsel review the Privacy and Terms pages, and create the `privacy@openswarm.com` mailbox they reference. Email delivery and ownership verification need separate implementation.
+- Have counsel review the Privacy and Terms pages, and create the `privacy@openswarm.com` mailbox they reference. Send test emails from the dashboard and verify real inbox delivery before switching waitlist emails on. Email ownership verification remains a separate feature.
 - Confirm the waitlist counter baseline (6,327 by default). The hero shows this baseline plus real signups; change it in the dashboard's Settings.
 - Align Problem Validator's advertised source list with its six-agent demonstration and confirm the three “Coming soon” marketplace items.
 - Review illustrative quotes, restaurants, ratings, companies, candidates, amounts, and fixed dates in the demonstrations.

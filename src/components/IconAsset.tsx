@@ -14,11 +14,12 @@ const iconFiles = {
   gmail: 'gmail.svg',
   chrome: 'chrome.svg',
   notion: 'notion.svg',
+  x: 'x.svg',
 } as const
 
 export type IconAssetName = keyof typeof iconFiles
 
-/** Published Microsoft Fluent Emoji and SVGL artwork; provenance is in docs/icon-sources.md. */
+/** Published icon artwork; provenance is in docs/icon-sources.md. */
 export function IconAsset({ name, className, alt = '' }: { name: IconAssetName; className?: string; alt?: string }) {
   return (
     <img

@@ -1,16 +1,14 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, Loader2, Send, X } from 'lucide-react'
-import { useApi } from '../hooks'
+import { useApi, useDebounced, useQuery } from '../hooks'
 import { errorMessage } from '../errors'
-import type { AdminSettings, SettingKey, SettingValues, WelcomeEmail } from '../types'
+import type { AdminSettings, EmailKind, PriorityEmail, SettingKey, SettingValues, WelcomeEmail } from '../types'
 import { DOMAIN_RE, MAX_BLOCKED_DOMAINS, SETTING_EMAIL_RE, normalizeDomain } from '../validation'
-import { Badge, Button, Switch, inputClass } from '../ui'
+import { Button, ErrorState, Skeleton, Switch, Tabs, inputClass } from '../ui'
 
 const DEFAULT_WELCOME: WelcomeEmail = {
   enabled: false, from_name: 'Open Swarm', from_email: '', reply_to: '', subject: '', body: '', postal_address: '',
 }
-
-const SITE = (import.meta.env.VITE_PUBLIC_SITE_URL || 'https://openswarm.com').replace(/\/$/, '')
 
 type Msg = { ok: boolean; text: string } | null
 
@@ -244,133 +242,193 @@ function Limits({ hour, day, onSaved }: { hour: number; day: number; onSaved: ()
   )
 }
 
-function welcomeProblems(w: WelcomeEmail): string[] {
-  const p: string[] = []
-  if (w.from_name.length > 80) p.push('The from name can be up to 80 characters.')
-  if (w.from_email && !SETTING_EMAIL_RE.test(w.from_email)) p.push('The from address is not a valid email address.')
-  if (w.reply_to && !SETTING_EMAIL_RE.test(w.reply_to)) p.push('The reply-to address is not a valid email address.')
-  if (w.subject.trim().length < 1 || w.subject.trim().length > 150) p.push('The subject must be 1 to 150 characters.')
-  if (w.body.trim().length < 1 || w.body.trim().length > 5000) p.push('The body must be 1 to 5,000 characters.')
-  if (w.postal_address.length > 300) p.push('The postal address can be up to 300 characters.')
-  if (w.enabled && (!w.from_email || !w.postal_address.trim())) p.push('Set a from address and a postal address before turning the welcome email on.')
-  return p
+const DEFAULT_PRIORITY: PriorityEmail = { enabled: false, subject: 'You’ve unlocked priority early access' }
+
+function emailProblems(w: WelcomeEmail, p: PriorityEmail): string[] {
+  const out: string[] = []
+  if (w.from_name.length > 80) out.push('The sender name can be up to 80 characters.')
+  if (w.from_email && !SETTING_EMAIL_RE.test(w.from_email)) out.push('The sender address is not a valid email address.')
+  if (w.reply_to && !SETTING_EMAIL_RE.test(w.reply_to)) out.push('The reply-to address is not a valid email address.')
+  if (w.postal_address.length > 300) out.push('The postal address can be up to 300 characters.')
+  if (w.subject.trim().length < 1 || w.subject.trim().length > 150) out.push('The welcome subject must be 1 to 150 characters.')
+  if (p.subject.trim().length < 1 || p.subject.trim().length > 150) out.push('The priority subject must be 1 to 150 characters.')
+  if ((w.enabled || p.enabled) && (!w.from_email || !w.postal_address.trim())) {
+    out.push('Set the sender address and the postal address before turning an email on.')
+  }
+  return out
 }
 
-function WelcomeEmailForm({ saved, me, onSaved }: { saved: WelcomeEmail; me: string; onSaved: () => void }) {
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+function EmailPreviewPane({ w, p }: { w: WelcomeEmail; p: PriorityEmail }) {
+  const [kind, setKind] = useState<EmailKind>('welcome')
+  const [plain, setPlain] = useState(false)
+  // Re-render on the server shortly after typing stops.
+  const payload = useDebounced(JSON.stringify({ kind, w, p }), 500)
+  const q = useQuery(`email-preview|${payload}`, (a) => {
+    const x = JSON.parse(payload) as { kind: EmailKind; w: WelcomeEmail; p: PriorityEmail }
+    return a.emailPreview(x.kind, x.w, x.p)
+  })
+  const d = q.data
+  return (
+    <div className="min-w-0">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <Tabs label="Preview email" tabs={[{ key: 'welcome', label: 'Welcome' }, { key: 'priority', label: 'Priority' }] as const} value={kind} onChange={setKind} />
+        <label className="inline-flex items-center gap-2 text-[12px] text-ink-2">
+          <input type="checkbox" checked={plain} onChange={(e) => setPlain(e.target.checked)} />
+          Plain text
+        </label>
+      </div>
+      <div className="overflow-hidden rounded-md border border-line bg-panel-2 text-[13px]" aria-busy={q.loading}>
+        {q.error && !d ? (
+          <ErrorState error={q.error} onRetry={q.reload} />
+        ) : !d ? (
+          <Skeleton className="m-3 h-[420px]" />
+        ) : (
+          <>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-b border-line px-3 py-2 text-[12px]">
+              <dt className="text-ink-3">From</dt>
+              <dd className="min-w-0 truncate">{d.from}</dd>
+              {w.reply_to && (<><dt className="text-ink-3">Reply-to</dt><dd className="min-w-0 truncate">{w.reply_to}</dd></>)}
+              <dt className="text-ink-3">Subject</dt>
+              <dd className="min-w-0 truncate font-medium">{d.subject}</dd>
+            </dl>
+            <div className={q.loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+              {plain ? (
+                <pre className="max-h-[480px] overflow-auto px-3 py-3 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap">{d.text}</pre>
+              ) : (
+                // No scripts, no same-origin access: the HTML is shown, never trusted.
+                <iframe title={`${d.kind === 'priority' ? 'Priority' : 'Welcome'} email preview`} sandbox="" srcDoc={d.html} className="block h-[480px] w-full border-0 bg-white" />
+              )}
+            </div>
+          </>
+        )}
+      </div>
+      <p className="mt-1.5 text-[12px] text-ink-3">Rendered by the server with your unsaved changes. Links point at your own waitlist signup when you have one.</p>
+    </div>
+  )
+}
+
+function EmailsForm({ savedWelcome, savedPriority, onSaved }: { savedWelcome: WelcomeEmail; savedPriority: PriorityEmail; onSaved: () => void }) {
   const api = useApi()
   const id = useId()
-  const s = useSave(onSaved)
-  const [w, setW] = useState<WelcomeEmail>({ ...DEFAULT_WELCOME, ...saved })
-  const [testing, setTesting] = useState(false)
+  const [w, setW] = useState<WelcomeEmail>({ ...DEFAULT_WELCOME, ...savedWelcome })
+  const [p, setP] = useState<PriorityEmail>({ ...DEFAULT_PRIORITY, ...savedPriority })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<Msg>(null)
+  const [testing, setTesting] = useState<EmailKind | null>(null)
   const [testMsg, setTestMsg] = useState<Msg>(null)
-  const set = <K extends keyof WelcomeEmail>(k: K, v: WelcomeEmail[K]) => setW((x) => ({ ...x, [k]: v }))
-  const problems = welcomeProblems(w)
-  const dirty = JSON.stringify(w) !== JSON.stringify({ ...DEFAULT_WELCOME, ...saved })
-  const inviteExample = `${SITE}/?ref=EXAMPLE-INVITE-CODE`
-  const preview = w.body.split('{{invite_link}}').join(inviteExample)
-  const hasLink = w.body.includes('{{invite_link}}')
+  const setWf = <K extends keyof WelcomeEmail>(k: K, v: WelcomeEmail[K]) => setW((x) => ({ ...x, [k]: v }))
+  const problems = emailProblems(w, p)
+  const baseW = { ...DEFAULT_WELCOME, ...savedWelcome }
+  const baseP = { ...DEFAULT_PRIORITY, ...savedPriority }
+  const dirtyW = !same(w, baseW)
+  const dirtyP = !same(p, baseP)
 
-  async function sendTest() {
-    setTesting(true)
-    setTestMsg(null)
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    if (problems.length) return
+    setBusy(true)
+    setMsg(null)
     try {
-      const realLinks = await api.testEmail(w)
-      setTestMsg({ ok: true, text: `Sent a test to ${me}. It uses the form as it is now, saved or not. ${realLinks
-        ? 'The invite and unsubscribe links are your own waitlist links.'
-        : 'Your address isn’t on the waitlist, so its links are samples; join with it to test real links.'}` })
-    } catch (e) {
-      const m = errorMessage(e)
-      setTestMsg({ ok: false, text: /not configured/i.test(m) ? `${m} Ask whoever runs the server to set them; until then no email can be sent.` : m })
+      // The sender is saved first: the server checks the saved sender before enabling the priority email.
+      // body is unused (fixed template) and goes back exactly as it was.
+      if (dirtyW) await api.updateSetting('welcome_email', { ...w, subject: w.subject.trim(), body: savedWelcome.body ?? w.body ?? '' })
+      if (dirtyP) await api.updateSetting('priority_email', { ...p, subject: p.subject.trim() })
+      setMsg({ ok: true, text: 'Saved.' })
+      onSaved()
+    } catch (err) {
+      setMsg({ ok: false, text: errorMessage(err) })
     } finally {
-      setTesting(false)
+      setBusy(false)
     }
   }
 
-  const field = (k: 'from_name' | 'from_email' | 'reply_to' | 'subject', label: string, extra: { type?: string; placeholder?: string; maxLength?: number; hint?: string } = {}) => (
+  async function sendTest(kind: EmailKind) {
+    setTesting(kind)
+    setTestMsg(null)
+    try {
+      const r = await api.testEmail(kind, w, p)
+      setTestMsg({
+        ok: true,
+        text: `Sent the ${r.kind} email to ${r.sentTo}${r.via === 'resend' ? ' via the Resend backup, because SMTP didn’t accept it' : ' via SMTP'}, as the form is now (saved or not). ${r.realLinks
+          ? 'Its invite and unsubscribe links are your own waitlist links.'
+          : 'Your address isn’t on the waitlist, so its links are samples; join with it to test real links.'}`,
+      })
+    } catch (err) {
+      const m = errorMessage(err)
+      setTestMsg({ ok: false, text: /not configured/i.test(m) ? `${m} Until one of them is set up on the server, no waitlist email can be sent.` : m })
+    } finally {
+      setTesting(null)
+    }
+  }
+
+  const input = (k: 'from_name' | 'from_email' | 'reply_to', label: string, extra: { type?: string; placeholder?: string; maxLength?: number; hint?: string } = {}) => (
     <label htmlFor={`${id}-${k}`} className="flex min-w-0 flex-col gap-1 text-[12px] font-medium text-ink-2">
       {label}
-      <input
-        id={`${id}-${k}`}
-        type={extra.type ?? 'text'}
-        value={w[k]}
-        maxLength={extra.maxLength}
-        placeholder={extra.placeholder}
-        onChange={(e) => set(k, e.target.value)}
-        className={inputClass}
-        autoComplete="off"
-      />
+      <input id={`${id}-${k}`} type={extra.type ?? 'text'} value={w[k]} maxLength={extra.maxLength} placeholder={extra.placeholder} onChange={(e) => setWf(k, e.target.value)} className={inputClass} autoComplete="off" />
       {extra.hint && <span className="font-normal text-ink-3">{extra.hint}</span>}
     </label>
   )
 
+  const group = (title: string, description: string, children: ReactNode) => (
+    <fieldset className="rounded-md border border-line p-3">
+      <legend className="px-1 text-[12.5px] font-semibold">{title}</legend>
+      <p className="-mt-0.5 mb-2.5 text-[12px] text-ink-3">{description}</p>
+      {children}
+    </fieldset>
+  )
+
+  const emailGroup = (kind: EmailKind, enabled: boolean, setEnabled: (v: boolean) => void, subject: string, setSubject: (v: string) => void) => (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center justify-between gap-4 text-[13px]">
+        <span id={`${id}-${kind}-on`} className="font-medium">Send the {kind} email</span>
+        <Switch checked={enabled} labelledBy={`${id}-${kind}-on`} onChange={setEnabled} />
+      </div>
+      <label htmlFor={`${id}-${kind}-subject`} className="flex flex-col gap-1 text-[12px] font-medium text-ink-2">
+        Subject
+        <input id={`${id}-${kind}-subject`} value={subject} maxLength={150} onChange={(e) => setSubject(e.target.value)} className={inputClass} />
+      </label>
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => sendTest(kind)} disabled={testing !== null || !w.from_email}>
+          {testing === kind ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Send className="size-3.5" aria-hidden />} Send test
+        </Button>
+      </div>
+    </div>
+  )
+
   return (
-    <form
-      className="grid gap-5 lg:grid-cols-2"
-      onSubmit={async (e) => {
-        e.preventDefault()
-        if (!problems.length) await s.save('welcome_email', { ...w, subject: w.subject.trim(), body: w.body.trim() })
-      }}
-    >
+    <form className="grid gap-5 lg:grid-cols-2" onSubmit={save} noValidate>
       <div className="flex min-w-0 flex-col gap-3">
-        <label className="flex items-center justify-between gap-4 text-[13px]">
-          <span id={`${id}-en`}>
-            <span className="font-medium">Send a welcome email to new signups</span>
-            <span className="block text-[12px] text-ink-3">Needs a from address and a postal address. Takes effect when you save.</span>
-          </span>
-          <Switch checked={w.enabled} labelledBy={`${id}-en`} onChange={(v) => set('enabled', v)} />
-        </label>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {field('from_name', 'From name', { maxLength: 80 })}
-          {field('from_email', 'From address', { type: 'email', placeholder: 'hello@openswarm.com', hint: 'Must be an address the email provider lets this site send from: with SMTP, the mailbox that signs in or one of its aliases.' })}
-          {field('reply_to', 'Reply-to (optional)', { type: 'email', placeholder: 'team@openswarm.com' })}
-          {field('subject', 'Subject', { maxLength: 150 })}
-        </div>
-        <label htmlFor={`${id}-body`} className="flex flex-col gap-1 text-[12px] font-medium text-ink-2">
-          Body (plain text)
-          <textarea
-            id={`${id}-body`}
-            rows={9}
-            maxLength={5000}
-            value={w.body}
-            onChange={(e) => set('body', e.target.value)}
-            className={`${inputClass} h-auto py-1.5 font-mono text-[12.5px] leading-relaxed`}
-            aria-describedby={`${id}-body-help`}
-          />
-          <span id={`${id}-body-help`} className="font-normal text-ink-3">
-            <code className="rounded bg-hover px-1 font-mono">{'{{invite_link}}'}</code> is replaced with the person’s invite link; an unsubscribe link and the postal address are added automatically.
-            <span className="ml-1 num">{w.body.trim().length}/5000</span>
-          </span>
-        </label>
-        <label htmlFor={`${id}-addr`} className="flex flex-col gap-1 text-[12px] font-medium text-ink-2">
-          Postal address
-          <textarea
-            id={`${id}-addr`}
-            rows={2}
-            maxLength={300}
-            value={w.postal_address}
-            onChange={(e) => set('postal_address', e.target.value)}
-            placeholder="Company name, street, city, postcode, country"
-            className={`${inputClass} h-auto py-1.5`}
-          />
-          <span className="font-normal text-ink-3">Required by anti-spam laws (CAN-SPAM) in every marketing email.</span>
-        </label>
+        {group('Sender', 'Used by every waitlist email (welcome and priority).', (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {input('from_name', 'Sender name', { maxLength: 80 })}
+            {input('from_email', 'Sender address', { type: 'email', placeholder: 'hello@openswarm.com', hint: 'Must be allowed to send through the SMTP account (and verified in Resend, if the backup is set up).' })}
+            {input('reply_to', 'Reply-to (optional)', { type: 'email', placeholder: 'team@openswarm.com' })}
+            <label htmlFor={`${id}-addr`} className="flex min-w-0 flex-col gap-1 text-[12px] font-medium text-ink-2 sm:col-span-2">
+              Postal address
+              <textarea id={`${id}-addr`} rows={2} maxLength={300} value={w.postal_address} onChange={(e) => setWf('postal_address', e.target.value)} placeholder="Company name, street, city, postcode, country" className={`${inputClass} h-auto py-1.5`} />
+              <span className="font-normal text-ink-3">Shown in the footer of every email, as anti-spam laws (CAN-SPAM) require.</span>
+            </label>
+          </div>
+        ))}
+        {group('Welcome email', 'Sent right after someone joins. The content is the branded template; you set the subject.',
+          emailGroup('welcome', w.enabled, (v) => setWf('enabled', v), w.subject, (v) => setWf('subject', v)))}
+        {group('Priority email', 'Sent once, when someone’s third friend joins and they unlock priority access.',
+          emailGroup('priority', p.enabled, (v) => setP((x) => ({ ...x, enabled: v })), p.subject, (v) => setP((x) => ({ ...x, subject: v }))))}
         {problems.length > 0 && (
           <ul role="alert" className="list-disc pl-4 text-[12.5px] text-down">
-            {problems.map((p) => <li key={p}>{p}</li>)}
+            {problems.map((x) => <li key={x}>{x}</li>)}
           </ul>
         )}
-        {!hasLink && w.body.trim() && <p className="text-[12.5px] text-ink-3">Tip: add {'{{invite_link}}'} so people can share their link straight from the email.</p>}
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {dirty && <span className="text-[12px] text-ink-3">Unsaved changes</span>}
-          {dirty && <Button size="sm" variant="ghost" onClick={() => setW({ ...DEFAULT_WELCOME, ...saved })}>Discard</Button>}
-          <Button size="sm" onClick={sendTest} disabled={testing || !w.from_email || problems.some((p) => !p.startsWith('Set a from'))}>
-            {testing ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Send className="size-3.5" aria-hidden />} Send test email
-          </Button>
-          <Button type="submit" size="sm" variant="primary" disabled={!dirty || s.busy || problems.length > 0}>
-            {s.busy && <Loader2 className="size-3.5 animate-spin" aria-hidden />} Save welcome email
+          {(dirtyW || dirtyP) && <span className="text-[12px] text-ink-3">Unsaved changes</span>}
+          {(dirtyW || dirtyP) && <Button size="sm" variant="ghost" onClick={() => { setW(baseW); setP(baseP) }}>Discard</Button>}
+          <Button type="submit" size="sm" variant="primary" disabled={!(dirtyW || dirtyP) || busy || problems.length > 0}>
+            {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden />} Save emails
           </Button>
         </div>
-        <Status msg={s.msg} />
+        <Status msg={msg} />
         {testMsg && (
           <p role={testMsg.ok ? 'status' : 'alert'} className={`flex items-start gap-1.5 text-[12.5px] ${testMsg.ok ? 'text-up' : 'text-down'}`}>
             {testMsg.ok ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" aria-hidden /> : <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />}
@@ -378,25 +436,7 @@ function WelcomeEmailForm({ saved, me, onSaved }: { saved: WelcomeEmail; me: str
           </p>
         )}
       </div>
-
-      <div className="min-w-0">
-        <p className="mb-1.5 flex items-center gap-2 text-[12px] font-medium text-ink-2">
-          Preview {w.enabled ? <Badge tone="good">On</Badge> : <Badge>Off</Badge>}
-        </p>
-        <div className="overflow-hidden rounded-md border border-line bg-panel-2 text-[13px]">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-b border-line px-3 py-2 text-[12px]">
-            <dt className="text-ink-3">From</dt>
-            <dd className="min-w-0 truncate">{w.from_name || '(no name)'} &lt;{w.from_email || 'not set'}&gt;</dd>
-            {w.reply_to && (<><dt className="text-ink-3">Reply-to</dt><dd className="min-w-0 truncate">{w.reply_to}</dd></>)}
-            <dt className="text-ink-3">Subject</dt>
-            <dd className="min-w-0 truncate font-medium">{w.subject || '(no subject)'}</dd>
-          </dl>
-          <div className="px-3 py-3 break-words whitespace-pre-wrap">{preview || <span className="text-ink-3">(empty body)</span>}</div>
-          <div className="border-t border-dashed border-line px-3 py-2 text-[11.5px] whitespace-pre-wrap text-ink-3">
-            {'Don’t want these emails? [one-click unsubscribe link]'}{'\n'}{w.postal_address || '(postal address not set)'}
-          </div>
-        </div>
-      </div>
+      <EmailPreviewPane w={w} p={p} />
     </form>
   )
 }
@@ -406,7 +446,6 @@ export function SignupSettings({ data, onSaved }: { data: AdminSettings; onSaved
   const open = st.signups_open !== false
   const message = typeof st.signups_closed_message === 'string' ? st.signups_closed_message : ''
   const domains = Array.isArray(st.blocked_email_domains) ? st.blocked_email_domains : []
-  const welcome = st.welcome_email ?? DEFAULT_WELCOME
   return (
     <div className="flex flex-col gap-5">
       <Section title="Signups" description="Pause the waitlist without a deploy.">
@@ -418,8 +457,8 @@ export function SignupSettings({ data, onSaved }: { data: AdminSettings; onSaved
       <Section title="Rate limits" description="Maximum signups from one network (IP address). Offices and campuses share one, so leave some headroom.">
         <Limits hour={Number(st.signup_limit_per_hour ?? 10)} day={Number(st.signup_limit_per_day ?? 40)} onSaved={onSaved} />
       </Section>
-      <Section title="Welcome email" description="Sent once, right after someone joins.">
-        <WelcomeEmailForm saved={welcome} me={data.me} onSaved={onSaved} />
+      <Section title="Waitlist emails" description="Sent over SMTP (Google Workspace), with Resend as a backup when it is configured. If neither accepts an email, it stays queued and is retried daily.">
+        <EmailsForm savedWelcome={st.welcome_email ?? DEFAULT_WELCOME} savedPriority={st.priority_email ?? DEFAULT_PRIORITY} onSaved={onSaved} />
       </Section>
     </div>
   )

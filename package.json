@@ -7,11 +7,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "email:preview": "node --experimental-strip-types scripts/preview-emails.ts",
+    "email:build": "node --experimental-strip-types scripts/preview-emails.ts --build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
     "@tailwindcss/vite": "^4.3.3",
+    "@vercel/functions": "^3.9.9",
     "bowser": "^2.14.1",
     "clsx": "^2.1.1",
     "disposable-email-domains-js": "^1.26.0",

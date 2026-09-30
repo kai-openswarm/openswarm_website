@@ -1,9 +1,10 @@
 import { useRef, type CSSProperties } from 'react'
-import { clamp, easeOut, ep, inOut, lerp, popIn, rise, seg, typed, useTimeline } from '../os/kit'
+import { clamp, easeOut, ep, inOut, lerp, popIn, rise, seg, typed } from '../os/kit'
 import { AppIcon } from '../ui/AppIcon'
 import { B, type Brand } from '@/lib/brands'
 import { cn } from '@/lib/utils'
-import { Ask, Glass, PanelRoot, Spinner } from './shared'
+import { Ask, Glass, PanelRoot, Spinner, type PanelProps } from './shared'
+import { usePanelTimeline } from './usePanelTimeline'
 
 /*
   Sales and outreach: a lead list that turns into outreach. Series A fintech companies land in
@@ -323,9 +324,9 @@ function Draft({ t }: { t: number }) {
   )
 }
 
-export function SalesPanel({ prompt }: { prompt: string }) {
+export function SalesPanel({ prompt, previewTime }: PanelProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const t = useTimeline(LOOP, ref, REST)
+  const t = usePanelTimeline(LOOP, ref, REST, previewTime)
 
   // the work fades out together at the end of the loop, so t=0 and t=LOOP match
   const out = 1 - ep(t, OUT, OUT + 0.45)

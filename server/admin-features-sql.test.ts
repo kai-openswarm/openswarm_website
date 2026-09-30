@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Pool } from 'pg'
 import type { IngestBatch } from './analytics.ts'
+import { createEmailOutbox } from './email-outbox.ts'
 import { createPostgresAnalyticsStore } from './postgres-analytics.ts'
 import { createPostgresWaitlistStore } from './postgres-waitlist.ts'
 import { parseSignupConfig } from './signup-config.ts'
@@ -112,16 +113,34 @@ test('email signup settings, filter operators, comparisons, referrals loop, anno
     assert.equal(config.signup_limit_per_hour, 3)
     assert.equal(config.welcome_email.enabled, true)
 
-    // Email log and unsubscribes through the API role, then the report.
-    await api.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [inviter.referral.code, 'welcome', 'sent', 'em_1', null])
-    await api.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [inviter.referral.code, 'welcome', 'failed', null, 'Resend 422'])
+    // Queue, test log and unsubscribe through the API role, then the report.
+    const friend = (await api.query("SELECT referral_code FROM waitlist_signups WHERE email = 'friend@example.org'")).rows[0].referral_code
+    for (const code of [inviter.referral.code, friend]) {
+      await api.query("INSERT INTO waitlist_email_outbox (id, referral_code, kind) VALUES (gen_random_uuid(), $1, 'welcome')", [code])
+    }
+    await api.query('SELECT analytics.log_email($1, $2, $3, $4, $5)', [inviter.referral.code, 'test', 'sent', 'smtp-1', 'welcome'])
     assert.equal((await api.query('SELECT analytics.unsubscribe($1) AS ok', [inviter.referral.code])).rows[0].ok, true)
     assert.equal((await api.query('SELECT analytics.unsubscribe($1) AS ok', ['z'.repeat(32)])).rows[0].ok, false)
+    const optOut = (await database.query('SELECT email_opted_out_at IS NOT NULL AS out FROM waitlist_signups WHERE referral_code = $1', [inviter.referral.code])).rows[0]
+    assert.equal(optOut.out, true, 'unsubscribe records the queue’s opt-out')
     const report = await asAdmin<Record<string, unknown>>(database, 'SELECT public.admin_email_report($1, $2)', [from, to])
-    assert.deepEqual(report.welcome, { sent: 1, failed: 1, skipped: 0 })
+    assert.deepEqual(report.welcome, { sent: 0, failed: 0, pending: 1, cancelled: 1, skipped: 0 }, 'unsubscribing cancels queued email')
+    assert.deepEqual(report.tests, { sent: 1, failed: 0 })
+    assert.equal(report.pending_all_time, 1)
     assert.equal(report.unsubscribed, 1)
     assert.deepEqual(report.domains, [{ domain: 'example.com', signups: 1 }, { domain: 'example.org', signups: 1 }])
+    // The website role can queue with the inviter lock, drain the queue and record opt-outs.
+    const queued = await waitlist.add('queued@example.net', 'hero', friend, { emailEvents: { welcome: true, priority: true } })
+    assert.equal(queued.added, true)
+    const drained = await createEmailOutbox(api).drain({
+      limit: 5,
+      render: ({ email, kind }) => ({ from: 'Open Swarm <noreply@example.com>', to: [email], subject: kind, html: '<p>Hi</p>', text: 'Hi' }),
+      send: async (_payload, key) => ({ id: `smtp-${key}` }),
+    })
+    assert.equal(drained.sent, 2, 'the friend’s and the new signup’s welcome emails')
+    await createEmailOutbox(api).unsubscribe(queued.referral.code)
     await assert.rejects(api.query('SELECT * FROM analytics.settings'), /permission denied/)
+    await assert.rejects(api.query("UPDATE waitlist_signups SET source = 'x'"), /permission denied/)
     await api.end()
   })
 })

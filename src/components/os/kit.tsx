@@ -231,7 +231,8 @@ export function Rail({
   const top: { key: string; asset: AppAssetId; p?: number }[] = [
     { key: 'chat', asset: 'messages' },
     { key: 'video', asset: 'facetime' },
-    { key: 'book', asset: 'books' },
+    { key: 'chatgpt', asset: 'chatgpt' },
+    { key: 'claude', asset: 'claude' },
   ]
   return (
     <div className={cn('demo-rail absolute ml-[4px] flex w-[48px] flex-col items-center gap-[10px] rounded-[24px] py-[12px]', className)} style={style}>

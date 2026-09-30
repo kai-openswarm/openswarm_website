@@ -18,6 +18,7 @@ const ACTIONS: Record<string, string> = {
   remove_admin: 'Removed an admin',
   add_annotation: 'Added an annotation',
   delete_annotation: 'Deleted an annotation',
+  send_pending_emails: 'Sent queued emails',
 }
 
 function auditDetail(e: AuditEntry): string {
@@ -32,6 +33,7 @@ function auditDetail(e: AuditEntry): string {
       if (v && typeof v === 'object') return `${s('key')} updated`
       return `${s('key')} → ${s('value')}`
     }
+    case 'send_pending_emails': return `sent ${s('sent') || 0}, retried ${s('retried') || 0}, failed ${s('failed') || 0}`
     case 'add_annotation': return s('title')
     case 'delete_annotation': return s('id') ? `#${s('id')}` : ''
     case 'add_admin':
