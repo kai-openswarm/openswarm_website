@@ -1,6 +1,6 @@
 import { AD_OPT_OUT_KEY } from '../lib/x-pixel'
 
-/* "Your privacy choices": turns the X advertising pixel off (or back on) for this browser. */
+/* "Your privacy choices": turns advertising measurement (X and Meta) and session recordings off (or back on) for this browser. */
 const status = document.getElementById('choice-status')
 const optOut = document.getElementById('opt-out')
 const optIn = document.getElementById('opt-in')
@@ -22,7 +22,11 @@ function render(message = '') {
 }
 
 optOut?.addEventListener('click', () => {
-  try { localStorage.setItem(AD_OPT_OUT_KEY, '1') } catch { /* Blocked storage already prevents the pixel from being remembered. */ }
+  try {
+    localStorage.setItem(AD_OPT_OUT_KEY, '1')
+    // Saved ad click ids are deleted too, so a later signup carries none.
+    localStorage.removeItem('openswarm:ad-clicks')
+  } catch { /* Blocked storage already prevents the pixel from being remembered. */ }
   render('Done. Advertising tracking and session recordings are off in this browser. Reload any open OpenSwarm pages to apply it.')
 })
 optIn?.addEventListener('click', () => {

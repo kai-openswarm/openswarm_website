@@ -144,3 +144,49 @@ test('email signup settings, filter operators, comparisons, referrals loop, anno
     await api.end()
   })
 })
+
+test('signups keep ad click ids and experiment variants; admin_experiments compares variants', { skip }, async () => {
+  await withTestDatabase(async (database) => {
+    await applyMigrations(database)
+    const api = await connectAsApiRole(database)
+    const analytics = createPostgresAnalyticsStore(api)
+    const waitlist = createPostgresWaitlistStore(api)
+    const from = new Date(Date.now() - 86_400_000).toISOString()
+    const to = new Date(Date.now() + 60_000).toISOString()
+
+    // Three visitors on the "agents" ad link (one joins), two on control by random split (none join), one internal.
+    for (const n of [1, 2, 3]) {
+      await analytics.ingest(batch(uuid(n), uuid(100 + n), { channel: 'Paid Social', source: 'meta', click_id: 'meta' },
+        [['pageview'], ['experiment', { exp: 'hero', variant: 'agents', assigned: 'forced' }]]))
+    }
+    for (const n of [4, 5]) {
+      await analytics.ingest(batch(uuid(n), uuid(100 + n), {}, [['pageview'], ['experiment', { exp: 'hero', variant: 'control', assigned: 'random' }]]))
+    }
+    await analytics.ingest({ ...batch(uuid(6), uuid(106), {}, [['pageview'], ['experiment', { exp: 'hero', variant: 'control', assigned: 'random' }]]), internal: true })
+    const joined = await waitlist.add('ad@example.com', 'hero', undefined, {
+      visitorId: uuid(1), sessionId: uuid(101),
+      clickIds: { fbclid: 'IwAR0abc', fbc: 'fb.1.1.IwAR0abc', bogus: 'x' } as Record<string, string>,
+      experiments: { hero: 'agents', 'Bad Key': 'x' } as Record<string, string>,
+    })
+    await waitlist.add('plain@example.com', 'hero')
+
+    const stored = await database.query('SELECT click_ids, experiments FROM analytics.signup_attribution WHERE referral_code = $1', [joined.referral.code])
+    assert.deepEqual(stored.rows[0], { click_ids: { fbclid: 'IwAR0abc', fbc: 'fb.1.1.IwAR0abc' }, experiments: { hero: 'agents' } })
+
+    const rows = await asAdmin<{ exp: string, variant: string, visitors: number, from_ads: number, signups: number }[]>(
+      database, 'SELECT public.admin_experiments($1, $2)', [from, to])
+    assert.deepEqual(rows.map((r) => [r.exp, r.variant, Number(r.visitors), Number(r.from_ads), Number(r.signups)]),
+      [['hero', 'agents', 3, 3, 1], ['hero', 'control', 2, 0, 0]])
+
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query("SELECT set_config('request.jwt.claims', $1, true)", [JSON.stringify({ email: 'intruder@example.com', role: 'authenticated' })])
+      await client.query('SET LOCAL ROLE authenticated')
+      await assert.rejects(client.query('SELECT public.admin_experiments($1, $2)', [from, to]), /Admin access required/)
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+})

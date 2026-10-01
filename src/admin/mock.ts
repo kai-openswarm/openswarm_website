@@ -5,7 +5,7 @@
 import type { AdminApi } from './api'
 import { ApiError } from './api'
 import type {
-  AdminSettings, Annotation, AuditEntry, EmailEngagement, PageOverlay, EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
+  AdminSettings, Annotation, AuditEntry, EmailEngagement, ExperimentRow, PageOverlay, EmailKind, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult, BreakdownRow, Bucket, Dimension, EmailReport, Engagement, ExportRow, FilterClause, Filters, Funnel,
   Kpis, Overview, Performance, RangeQuery, Realtime, RealtimeEvent, Referrals, SectionKey, SettingValues, SignupRow, TimeseriesPoint, VitalRow, WelcomeEmail,
 } from './types'
 import { NONE } from './types'
@@ -1214,6 +1214,13 @@ export function createMockApi(): AdminApi {
       if (i >= 0) annotations.splice(i, 1)
       audited('delete_annotation', { id })
     }),
+
+    experiments: () => delay((): ExperimentRow[] => [
+      { exp: 'hero', variant: 'control', visitors: 1840, from_ads: 0, signups: 61, first_seen: '2026-09-01T00:00:00Z' },
+      { exp: 'hero', variant: 'free', visitors: 1795, from_ads: 420, signups: 74, first_seen: '2026-09-01T00:00:00Z' },
+      { exp: 'hero', variant: 'agents', visitors: 1822, from_ads: 610, signups: 92, first_seen: '2026-09-01T00:00:00Z' },
+      { exp: 'hero', variant: 'desktop', visitors: 240, from_ads: 240, signups: 6, first_seen: '2026-09-20T00:00:00Z' },
+    ]),
 
     pageOverlay: (q) => delay((): PageOverlay => {
       const s = eventWindow(q)

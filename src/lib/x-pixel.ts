@@ -67,16 +67,18 @@ export function adTrackingAllowed() {
 }
 
 /** Reports a completed waitlist signup as an X conversion, when configured and allowed. */
-export function trackXSignup() {
+export function trackXSignup(eventId?: string) {
   if (!installed || !X_SIGNUP_EVENT_ID || !adTrackingAllowed()) return
-  xWindow().twq?.('event', X_SIGNUP_EVENT_ID, {})
+  // conversion_id lets X drop a duplicate if the same signup is reported twice.
+  xWindow().twq?.('event', X_SIGNUP_EVENT_ID, eventId ? { conversion_id: eventId } : {})
 }
 
-export function installXPixel() {
-  if (installed || typeof window === 'undefined' || !adTrackingAllowed() || window.self !== window.top) return
+/** Ad scripts run only on the hosted site, outside frames, and only when the visitor allows it. */
+export function adScriptsAllowed() {
+  if (typeof window === 'undefined' || !adTrackingAllowed() || window.self !== window.top) return false
   const hostname = window.location.hostname.toLowerCase().replace(/\.$/, '')
   // Keep local waitlist testing local; ad scripts can inspect form interactions.
-  if (
+  return !(
     import.meta.env.DEV ||
     hostname === 'localhost' ||
     hostname.endsWith('.localhost') ||
@@ -84,7 +86,11 @@ export function installXPixel() {
     hostname === '[::1]' ||
     hostname === '::1' ||
     hostname === '0.0.0.0'
-  ) return
+  )
+}
+
+export function installXPixel() {
+  if (installed || !adScriptsAllowed()) return
   installed = true
 
   const win = xWindow()

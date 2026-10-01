@@ -51,7 +51,7 @@ test('runtime-parsed bodies retain the size limit before calling storage', async
     async add() { assert.fail('Oversized input must not reach storage') },
     async referral() { return null },
   }
-  const { post } = await setup(t, createProductionWaitlistHandler(store), { email: ' Alex@Example.com ', extra: 'x'.repeat(5000) })
+  const { post } = await setup(t, createProductionWaitlistHandler(store), { email: ' Alex@Example.com ', extra: 'x'.repeat(9000) })
   assert.equal((await post({})).status, 413)
 })
 

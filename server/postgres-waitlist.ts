@@ -56,6 +56,11 @@ export function createPostgresWaitlistStore(
           await client.query('SELECT analytics.attribute_signup($1, $2::uuid, $3::uuid, $4::jsonb)', [
             inserted.rows[0].referral_code, context.visitorId ?? null, context.sessionId ?? null, JSON.stringify(context.fallback ?? {}),
           ])
+          if (context.clickIds || context.experiments) {
+            await client.query('SELECT analytics.attribute_signup_ads($1, $2::jsonb, $3::jsonb)', [
+              inserted.rows[0].referral_code, JSON.stringify(context.clickIds ?? {}), JSON.stringify(context.experiments ?? {}),
+            ])
+          }
         }
         // A concurrent insert may have won the unique email constraint. A separate
         // READ COMMITTED statement sees that committed row without rewriting its inviter.

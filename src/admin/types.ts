@@ -431,3 +431,14 @@ export interface PageOverlay {
   /** href is host + path, e.g. "x.com/openswarm". */
   outbound: { href: string; clicks: number; sessions: number }[]
 }
+
+/** One experiment variant: visitors who saw it and the signups it produced (admin_experiments). */
+export interface ExperimentRow {
+  exp: string
+  variant: string
+  visitors: number
+  /** Visitors who arrived on a link that picked this variant (ads and campaigns). */
+  from_ads: number
+  signups: number
+  first_seen: string | null
+}

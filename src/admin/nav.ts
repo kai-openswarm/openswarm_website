@@ -4,7 +4,7 @@ import type { Bucket } from './types'
 import { isFilterKey } from './filters'
 
 export const PAGES = [
-  'overview', 'realtime', 'traffic', 'audience', 'behavior', 'overlay', 'funnel', 'signups', 'email', 'referrals', 'performance', 'settings',
+  'overview', 'realtime', 'traffic', 'audience', 'behavior', 'overlay', 'funnel', 'experiments', 'signups', 'email', 'referrals', 'performance', 'settings',
 ] as const
 export type Page = (typeof PAGES)[number]
 

@@ -4,7 +4,7 @@ import { Pool } from 'pg'
 
 export const BASE_MIGRATIONS = ['../sql/test/supabase-stub.sql', '../sql/001_waitlist.sql']
 export const LATER_MIGRATIONS = ['../sql/002_email_waitlist.sql', '../sql/003_analytics.sql', '../sql/004_api_role.sql', '../sql/005_admin_features.sql',
-  '../sql/006_waitlist_email_delivery.sql', '../sql/007_email_admin.sql', '../sql/008_email_analytics.sql', '../sql/009_page_overlay.sql', '../sql/010_openswarm_name.sql']
+  '../sql/006_waitlist_email_delivery.sql', '../sql/007_email_admin.sql', '../sql/008_email_analytics.sql', '../sql/009_page_overlay.sql', '../sql/010_openswarm_name.sql', '../sql/011_ads_experiments.sql']
 
 /** A pool connected as the least-privilege website role, as the hosted API is. */
 export async function connectAsApiRole(database: Pool) {
@@ -23,7 +23,10 @@ export async function connectAsApiRole(database: Pool) {
   url.pathname = `/${rows[0].name}`
   url.username = 'openswarm_api'
   url.password = 'test-only'
-  return new Pool({ connectionString: url.toString(), max: 8 })
+  const pool = new Pool({ connectionString: url.toString(), max: 8 })
+  // The throwaway database is dropped with this pool's idle connections still open.
+  pool.on('error', () => {})
+  return pool
 }
 
 /** Runs against a throwaway database on TEST_DATABASE_URL's server, then drops it. */
