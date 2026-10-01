@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ComponentType } from 'react'
 import {
-  Activity, Filter, Gauge, Layers, LayoutDashboard, LogOut, Mail, MousePointerClick, Settings as SettingsIcon, Share2, Signpost, UserPlus, Users,
+  Activity, Filter, FlaskConical, Gauge, Layers, LayoutDashboard, LogOut, Mail, MousePointerClick, Settings as SettingsIcon, Share2, Signpost, UserPlus, Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useRoute, type Page } from './nav'
@@ -15,6 +15,7 @@ import { Traffic } from './pages/Traffic'
 import { Audience } from './pages/Audience'
 import { Behavior } from './pages/Behavior'
 import { FunnelPage } from './pages/Funnel'
+import { ExperimentsPage } from './pages/Experiments'
 import { Signups } from './pages/Signups'
 import { ReferralsPage } from './pages/Referrals'
 import { PerformancePage } from './pages/Performance'
@@ -38,6 +39,7 @@ const NAV: PageDef[] = [
   { id: 'behavior', label: 'Behavior', icon: MousePointerClick, description: 'What visitors see and do on the page.', toolbar: 'full', Component: Behavior },
   { id: 'overlay', label: 'Page overlay', icon: Layers, description: 'Where on the landing page visitors leave, scroll to and click, drawn on the page itself.', toolbar: 'full', Component: OverlayPage },
   { id: 'funnel', label: 'Funnel', icon: Filter, description: 'From first visit to joining and sharing.', toolbar: 'full', Component: FunnelPage },
+  { id: 'experiments', label: 'Experiments', icon: FlaskConical, description: 'A/B tests: signup rate by variant, and links that send each ad to its matching headline.', toolbar: 'range', Component: ExperimentsPage },
   { id: 'signups', label: 'Signups', icon: UserPlus, description: 'Everyone who joined the waitlist in this range.', toolbar: 'range', Component: Signups },
   { id: 'email', label: 'Email', icon: Mail, description: 'Welcome email delivery, unsubscribes and signup email domains.', toolbar: 'range', Component: EmailPage },
   { id: 'referrals', label: 'Referrals', icon: Share2, description: 'Invite links and who is spreading the word.', toolbar: 'range', Component: ReferralsPage },

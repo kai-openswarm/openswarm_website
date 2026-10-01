@@ -10,7 +10,10 @@ import { normalizeEmail } from '@/lib/email'
 import { incomingReferralCode, parseReferral, saveReferralCode, type Referral } from '@/lib/referral'
 import { LINKS } from '@/lib/utils'
 import { analyticsIds, flush, track } from '@/lib/analytics'
-import { trackXSignup } from '@/lib/x-pixel'
+import { adTrackingAllowed, trackXSignup } from '@/lib/x-pixel'
+import { trackMetaLead } from '@/lib/meta-pixel'
+import { adClickIds } from '@/lib/ad-clicks'
+import { activeExperiments } from '@/lib/experiments'
 import { prepareTurnstile, turnstileToken } from '@/lib/turnstile'
 import { WAITLIST_JOINED_EVENT, useWaitlistStats } from '@/lib/waitlist-count'
 
@@ -101,6 +104,8 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
     const timeout = window.setTimeout(() => controller.abort(), 12000)
     const request = { controller, timeout }
     activeRequest.current = request
+    // One id for this signup, shared by the browser pixels and the server's Conversions API.
+    const eventId = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
     try {
       const verification = await turnstileToken()
       if (activeRequest.current !== request) return
@@ -114,6 +119,9 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
           consentVersion: CONSENT_VERSION,
           turnstileToken: verification,
           ...analyticsIds(),
+          experiments: activeExperiments(),
+          // Left out entirely when the visitor opted out of ad tracking.
+          ...(adTrackingAllowed() ? { ads: { eventId, page: `${window.location.origin}${window.location.pathname}`, ...adClickIds() } } : {}),
         }),
         signal: controller.signal,
       })
@@ -133,7 +141,8 @@ export function WaitlistForm({ placement }: { placement: 'hero' | 'closing' }) {
       track('waitlist_success', { placement, source: source.current, added, invited: !!invitedBy })
       flush()
       if (added) {
-        trackXSignup()
+        trackXSignup(eventId)
+        trackMetaLead(eventId)
         window.dispatchEvent(new Event(WAITLIST_JOINED_EVENT))
       }
       const personalReferral = parseReferral(result)

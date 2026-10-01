@@ -10,7 +10,7 @@ import { RequestError, clientIp, hashValue, hashingSecret, header, originAllowed
 export const EVENT_NAMES = new Set([
   'pageview', 'engagement', 'scroll', 'section_view', 'click', 'outbound', 'tab',
   'waitlist_view', 'waitlist_start', 'waitlist_error', 'waitlist_submit', 'waitlist_success', 'waitlist_fail',
-  'referral_open', 'referral_copy', 'referral_share', 'invite_visit', 'privacy_optout', 'vital', 'error',
+  'referral_open', 'referral_copy', 'referral_share', 'invite_visit', 'privacy_optout', 'vital', 'error', 'experiment',
 ])
 
 const MAX_BATCH_BYTES = 32_768
@@ -228,6 +228,8 @@ function sanitizeProps(name: string, raw: unknown): Record<string, string | numb
   if (name === 'scroll' && !(typeof props.depth === 'number' && SCROLL_DEPTHS.has(props.depth))) return null
   if (name === 'vital' && !(typeof props.value === 'number' && props.value >= 0 && typeof props.name === 'string')) return null
   if (name === 'waitlist_success' && 'added' in props && typeof props.added !== 'boolean') delete props.added
+  if (name === 'experiment' && !(typeof props.exp === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(props.exp)
+    && typeof props.variant === 'string' && /^[a-z0-9_]{1,32}$/.test(props.variant))) return null
   if (name === 'invite_visit' && !(typeof props.code === 'string' && REFERRAL_CODE.test(props.code))) return null
   return props
 }

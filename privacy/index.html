@@ -38,8 +38,9 @@
         <li><strong>Session recordings</strong>: a recording of how the page is used during some visits, such as scrolling, mouse movement and clicks, so we can see where the site is confusing. Anything you type into forms, including your email address, is hidden from recordings. Recordings are processed by PostHog on our behalf and are not made if you opt out below or your browser sends Global Privacy Control.</li>
         <li><strong>A random visitor identifier</strong> stored in your browser's local storage, so we can count returning visitors and tell which visit led to a signup. It is not linked to your identity unless you join the waitlist from that browser.</li>
       </ul>
-      <h3>Advertising pixel</h3>
-      <p>We use the X (formerly Twitter) advertising pixel to measure how our ads on X perform, for example whether someone who saw an ad later joined the waitlist. X may collect information about your visit, such as the page viewed and your browser, and combine it with information it already has. X's use of that information is governed by <a href="https://x.com/en/privacy" rel="noreferrer">X's privacy policy</a>. You can turn this off below.</p>
+      <h3>Advertising measurement</h3>
+      <p>When we advertise, we use advertising pixels from X (formerly Twitter) and Meta (Facebook and Instagram) to measure how our ads perform, for example whether someone who clicked an ad later joined the waitlist. These platforms may collect information about your visit, such as the page viewed, your browser and IP address, and combine it with information they already have. If you arrive from an ad, we keep the ad's click identifier in your browser for up to 90 days and store it with your signup.</p>
+      <p>When you join the waitlist, we also report the signup to Meta directly from our servers so it is counted even if your browser blocks the pixel. That report includes a one-way hashed (SHA-256) version of your email address, your browser's user agent and IP address, and the ad click identifier, which Meta uses to match the signup to an ad. We do not send your email address in readable form. Each platform's use of this information is governed by its own policy: <a href="https://x.com/en/privacy" rel="noreferrer">X's privacy policy</a> and <a href="https://www.facebook.com/privacy/policy" rel="noreferrer">Meta's privacy policy</a>. You can turn all of this off below; nothing is reported to advertisers when you opt out or your browser sends Global Privacy Control.</p>
 
       <h2 id="how-we-use">How we use information</h2>
       <ul>
@@ -51,7 +52,7 @@
       </ul>
 
       <h2 id="emails">Emails</h2>
-      <p>If you join the waitlist, we will email you about early access, invitations and product updates. Every marketing email includes an unsubscribe link, and you can unsubscribe at any time. <strong>We do not sell your email address or share it with third parties for their own marketing.</strong></p>
+      <p>If you join the waitlist, we will email you about early access, invitations and product updates. Every marketing email includes an unsubscribe link, and you can unsubscribe at any time. <strong>We do not sell your email address or share it with third parties for their own marketing.</strong> The only exception to sharing it at all is the hashed ad-measurement report described above, which you can turn off.</p>
       <p>To understand whether our emails are useful, we measure whether an email was opened (using a tiny image that loads when the email is displayed) and whether its main button was clicked (the button passes briefly through our website). We record this against the email we sent you, not your browsing elsewhere. You can prevent open measurement by turning off automatic image loading in your email app. If an email is sent through our backup delivery provider, that provider also reports whether it was delivered or bounced.</p>
 
       <h2 id="google-user-data">Google user data in the OpenSwarm app</h2>
@@ -81,14 +82,14 @@
         <li>Vercel (website hosting and approximate location), Supabase (database), and Cloudflare (bot protection and content delivery).</li>
         <li>Google Workspace (our email sender) and Resend (a backup email delivery provider), when we send waitlist emails.</li>
         <li>PostHog, which processes session recordings for us.</li>
-        <li>X, through the advertising pixel described above, unless you opt out.</li>
+        <li>X and Meta, for advertising measurement as described above, unless you opt out.</li>
         <li>AI model providers, to process conversations in the OpenSwarm app as described in <a href="#google-user-data">Google user data in the OpenSwarm app</a>.</li>
       </ul>
       <p>We may also disclose information if required by law, to protect rights and safety, or as part of a merger or acquisition, subject to this policy.</p>
 
       <h2 id="your-choices">Your privacy choices</h2>
       <div class="panel">
-        <p>Turn off the X advertising pixel and session recordings in this browser. We also honor the <strong>Global Privacy Control</strong> signal automatically. Our own first-party site analytics are not shared with advertisers.</p>
+        <p>Turn off advertising measurement (the X and Meta pixels and our signup reports to Meta) and session recordings in this browser. We also honor the <strong>Global Privacy Control</strong> signal automatically. Our own first-party site analytics are not shared with advertisers.</p>
         <button id="opt-out" type="button">Opt out of advertising tracking and recordings</button>
         <button id="opt-in" class="secondary" type="button" hidden>Turn advertising tracking and recordings back on</button>
         <p id="choice-status" role="status"></p>
@@ -100,7 +101,7 @@
       </ul>
 
       <h2 id="california">California residents</h2>
-      <p>If you live in California, you have the right to know what personal information we collect and how we use and disclose it, to request deletion or correction, to opt out of the "sale" or "sharing" of personal information, and not to be discriminated against for exercising these rights. We do not sell personal information for money. Our use of the X advertising pixel may be considered "sharing" for cross-context behavioral advertising; use the opt-out above or a Global Privacy Control signal to stop it. In the past 12 months we collected the categories described under <a href="#what-we-collect">What we collect</a> (identifiers, internet activity, approximate geolocation, and inferences about which channel brought you) for the purposes above. To exercise your rights, email <a href="mailto:privacy@openswarm.com">privacy@openswarm.com</a>. An authorized agent may submit a request on your behalf with proof of authorization.</p>
+      <p>If you live in California, you have the right to know what personal information we collect and how we use and disclose it, to request deletion or correction, to opt out of the "sale" or "sharing" of personal information, and not to be discriminated against for exercising these rights. We do not sell personal information for money. Our advertising measurement with X and Meta may be considered "sharing" for cross-context behavioral advertising; use the opt-out above or a Global Privacy Control signal to stop it. In the past 12 months we collected the categories described under <a href="#what-we-collect">What we collect</a> (identifiers, internet activity, approximate geolocation, and inferences about which channel brought you) for the purposes above. To exercise your rights, email <a href="mailto:privacy@openswarm.com">privacy@openswarm.com</a>. An authorized agent may submit a request on your behalf with proof of authorization.</p>
 
       <h2 id="retention">Retention</h2>
       <p>Detailed website usage events are deleted after 13 months. Waitlist records, including the signup-wording record, are kept while the waitlist and early-access program run, or until you ask us to delete them. Records of unsubscribes and opt-outs are kept so we can honor them.</p>

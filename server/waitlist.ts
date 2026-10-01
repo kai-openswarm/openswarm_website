@@ -35,6 +35,18 @@ export type SignupContext = {
   fallback?: Record<string, string | null>
   /** Which waitlist emails to queue with this signup (set from the admin email settings). */
   emailEvents?: { welcome: boolean, priority: boolean }
+  /** Ad click ids the visitor arrived with; absent when they opted out of ad tracking. */
+  clickIds?: Record<string, string>
+  /** Experiment variants the visitor saw, such as { hero: 'agents' }. */
+  experiments?: Record<string, string>
+}
+
+/** Details for reporting a signup to ad platforms. Only present when the visitor allows ad tracking. */
+export type SignupAds = {
+  eventId: string
+  /** The page the signup happened on, without query or fragment. */
+  page?: string
+  clickIds: Record<string, string>
 }
 
 export type WaitlistStore = {
@@ -56,10 +68,45 @@ export type WaitlistOptions = {
   /** Which waitlist emails to queue with a new signup, from the current settings. */
   emailEvents?(config: SignupConfig): { welcome: boolean, priority: boolean }
   /** Runs after a new signup is stored and before the response, e.g. scheduling email delivery. Never fails the signup. */
-  afterSignup?(signup: { email: string, referral: ReferralStatus, config: SignupConfig }, request: IncomingMessage): Promise<void>
+  afterSignup?(signup: { email: string, referral: ReferralStatus, config: SignupConfig, ads?: SignupAds, visitorId?: string }, request: IncomingMessage): Promise<void>
 }
 
-const MAX_BODY_BYTES = 4_096
+const MAX_BODY_BYTES = 8_192
+const CLICK_ID_KEYS = new Set(['fbclid', 'fbc', 'fbp', 'twclid', 'gclid', 'gbraid', 'wbraid', 'msclkid', 'ttclid', 'rdt_cid', 'li_fat_id'])
+const CLICK_ID_VALUE = /^[A-Za-z0-9._~-]{1,500}$/
+const EVENT_ID = /^[A-Za-z0-9-]{8,64}$/
+const EXPERIMENT_KEY = /^[a-z][a-z0-9_]{0,31}$/
+const EXPERIMENT_VARIANT = /^[a-z0-9_]{1,32}$/
+
+/** Ad details from the signup form. Dropped when malformed or when the browser sends Global Privacy Control. */
+export function parseSignupAds(value: unknown, request: IncomingMessage): SignupAds | undefined {
+  if (request.headers['sec-gpc'] === '1') return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const input = value as Record<string, unknown>
+  if (typeof input.eventId !== 'string' || !EVENT_ID.test(input.eventId)) return undefined
+  const clickIds: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(input)) {
+    if (CLICK_ID_KEYS.has(key) && typeof raw === 'string' && CLICK_ID_VALUE.test(raw)) clickIds[key] = raw
+  }
+  if (typeof input.clicked_at === 'string' && Number.isFinite(Date.parse(input.clicked_at))) {
+    clickIds.clicked_at = new Date(input.clicked_at).toISOString()
+  }
+  let page: string | undefined
+  try {
+    const url = typeof input.page === 'string' ? new URL(input.page) : null
+    if (url && url.protocol === 'https:') page = `${url.origin}${url.pathname}`.slice(0, 300)
+  } catch { /* An unreadable page is left out. */ }
+  return { eventId: input.eventId, clickIds, ...(page ? { page } : {}) }
+}
+
+export function parseExperiments(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const result: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(value).slice(0, 10)) {
+    if (EXPERIMENT_KEY.test(key) && typeof raw === 'string' && EXPERIMENT_VARIANT.test(raw)) result[key] = raw
+  }
+  return Object.keys(result).length ? result : undefined
+}
 const REFERRAL_CODE = /^[A-Za-z0-9_-]{32}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const CONSENT_VERSION = /^[a-z0-9-]{1,32}$/
@@ -265,7 +312,7 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
       if (!input || typeof input !== 'object' || Array.isArray(input)) {
         throw new RequestError(400, 'Enter a valid email address.')
       }
-      const { email: rawEmail, source: rawSource = 'website', referralCode, visitorId, sessionId, consentVersion, turnstileToken } = input as Record<string, unknown>
+      const { email: rawEmail, source: rawSource = 'website', referralCode, visitorId, sessionId, consentVersion, turnstileToken, ads: rawAds, experiments } = input as Record<string, unknown>
       const email = typeof rawEmail === 'string' ? normalizeEmail(rawEmail) : null
       if (!email || 'phone' in input) {
         throw new RequestError(400, 'Enter a valid email address.')
@@ -297,9 +344,13 @@ export function createWaitlistMiddleware(storage: string | WaitlistStore, option
         ...(typeof consentVersion === 'string' && CONSENT_VERSION.test(consentVersion) ? { consentVersion } : {}),
         ...(config && options.emailEvents ? { emailEvents: options.emailEvents(config) } : {}),
       }
+      const ads = parseSignupAds(rawAds, request)
+      if (ads && Object.keys(ads.clickIds).length) context.clickIds = ads.clickIds
+      const variants = parseExperiments(experiments)
+      if (variants) context.experiments = variants
       const { added, referral } = await store.add(email, rawSource.trim(), referralCode, context)
       if (added && config && options.afterSignup) {
-        await options.afterSignup({ email, referral, config }, request).catch(() => undefined)
+        await options.afterSignup({ email, referral, config, ads, visitorId: context.visitorId }, request).catch(() => undefined)
       }
       respond(response, added ? 201 : 200, { ok: true, referral })
     }

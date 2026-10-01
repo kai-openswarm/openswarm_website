@@ -18,6 +18,8 @@ const MAX_ERRORS = 5
 
 const endpoint = `${import.meta.env.BASE_URL}api/collect`
 let queue: QueuedEvent[] = []
+/** Events recorded during the first render, before tracking starts; sent after the pageview. */
+let early: QueuedEvent[] = []
 let started = false
 let visibleSince = 0
 let activeMs = 0
@@ -81,8 +83,12 @@ function internal() {
 }
 
 export function track(name: string, props?: Props) {
-  if (!started) return
-  queue.push({ n: name, t: Date.now(), p: window.location.pathname, ...(props ? { d: props } : {}) })
+  const event = { n: name, t: Date.now(), p: window.location.pathname, ...(props ? { d: props } : {}) }
+  if (!started) {
+    if (early.length < 10) early.push(event)
+    return
+  }
+  queue.push(event)
   if (queue.length >= MAX_QUEUE) flush()
 }
 
@@ -239,6 +245,8 @@ export function startAnalytics() {
 
   visibleSince = document.visibilityState === 'visible' ? Date.now() : 0
   track('pageview')
+  queue.push(...early)
+  early = []
   // Links back to the inviter so the dashboard can measure each invite link's reach.
   const invitedBy = params.get('ref')
   if (invitedBy && /^[A-Za-z0-9_-]{32}$/.test(invitedBy)) track('invite_visit', { code: invitedBy })

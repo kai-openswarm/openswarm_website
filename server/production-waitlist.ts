@@ -7,6 +7,7 @@ import { emailPublicUrl, readEmailDeliveryConfig, type EmailDeliverySetup } from
 import { createClickHandler, createOpenHandler, createResendWebhookHandler, type EmailEvent } from './email-tracking.ts'
 import { createUnsubscribeHandler } from './email-unsubscribe.ts'
 import { RequestError, clientIp, hashValue, hashingSecret, header, originAllowed, requestGeo } from './http.ts'
+import { readMetaConfig, sendMetaLead } from './meta-capi.ts'
 import { createPostgresAnalyticsStore } from './postgres-analytics.ts'
 import { createPostgresWaitlistStore } from './postgres-waitlist.ts'
 import { cachedSignupConfig, type SignupConfig } from './signup-config.ts'
@@ -141,13 +142,24 @@ export function handleProductionWaitlist(request: IncomingMessage, response: Ser
     const database = productionPool()
     if (!database) return createProductionWaitlistHandler(unavailable)(request, response)
     const mailer = productionMailer(database)
+    const meta = readMetaConfig()
     productionHandler = createProductionWaitlistHandler(createPostgresWaitlistStore(database), {
       ...productionWaitlistOptions(createPostgresAnalyticsStore(database)),
       config: productionSignupConfig(database),
       emailEvents: (config) => emailEvents(config, !!mailer),
       // The signup and its email job commit together; delivery happens after the response.
       // A daily worker and the dashboard's "Send pending now" pick up anything left over.
-      afterSignup: mailer ? async () => { waitUntil(mailer.drain(2).catch(() => undefined)) } : undefined,
+      // Ad platforms hear about the signup only when the visitor allows ad tracking.
+      afterSignup: mailer || meta ? async ({ email, ads, visitorId }, request) => {
+        if (mailer) waitUntil(mailer.drain(2).catch(() => undefined))
+        if (meta && ads) {
+          waitUntil(sendMetaLead({
+            eventId: ads.eventId, email, page: ads.page, visitorId,
+            ip: clientIp(request) === 'unknown' ? undefined : clientIp(request), userAgent: header(request, 'user-agent'),
+            fbc: ads.clickIds.fbc, fbp: ads.clickIds.fbp,
+          }, meta))
+        }
+      } : undefined,
     })
   }
   return productionHandler(request, response)

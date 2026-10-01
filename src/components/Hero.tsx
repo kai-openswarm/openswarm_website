@@ -8,9 +8,11 @@ import { WaitlistShareButton } from './ui/WaitlistReferral'
 import { media } from '@/lib/utils'
 import { NumberTicker } from './ui/number-ticker'
 import { useWaitlistCount } from '@/lib/waitlist-count'
+import { EXPERIMENTS, useVariant, type HeroVariant } from '@/lib/experiments'
 
 export function Hero() {
   const waitlistCount = useWaitlistCount()
+  const copy: HeroVariant = EXPERIMENTS.hero.variants[useVariant('hero')]
   return (
     <section id="top" data-section="top" className="relative px-2 pt-2 sm:px-3 sm:pt-3">
       <div className="relative isolate [--hero-reveal:18px] sm:[--hero-reveal:70px]">
@@ -34,8 +36,11 @@ export function Hero() {
           </a>
 
           <h1 className="mx-auto mt-5 max-w-[850px] font-display text-[40px] font-normal leading-[1.08] tracking-[-0.045em] text-[#0a2028] sm:mt-5 sm:text-[54px] lg:text-[60px]">
-            Everyone gets a Jarvis now.
+            {copy.headline}
           </h1>
+          {copy.sub && (
+            <p className="mx-auto mt-4 max-w-[620px] text-[16px] leading-[1.5] text-[#35515a] sm:text-[18px]">{copy.sub}</p>
+          )}
           <div className="mt-5">
             <WaitlistForm placement="hero" />
           </div>

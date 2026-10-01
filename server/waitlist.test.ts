@@ -113,7 +113,7 @@ test('rejects invalid input without creating a signup file', async (t) => {
   assert.equal(malformed.status, 400)
   const unsupported = await fetch(url, { method: 'POST', body: '{}' })
   assert.equal(unsupported.status, 415)
-  const oversized = await post({ email: 'alex@example.com', extra: 'x'.repeat(4_096) })
+  const oversized = await post({ email: 'alex@example.com', extra: 'x'.repeat(8_192) })
   assert.equal(oversized.status, 413)
   const unsupportedMethod = await fetch(url)
   assert.equal(unsupportedMethod.status, 405)

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
@@ -6,8 +6,20 @@ import { localWaitlistPlugin } from './server/waitlist.ts'
 
 const root = import.meta.dirname
 
-export default defineConfig({
-  plugins: [react(), tailwindcss(), localWaitlistPlugin()],
+/** Meta's domain verification tag, from VITE_META_DOMAIN_VERIFICATION. Left out when unset. */
+function metaDomainVerification(token: string | undefined): Plugin {
+  const value = token?.trim() ?? ''
+  return {
+    name: 'meta-domain-verification',
+    transformIndexHtml(html) {
+      const tag = /^[a-z0-9]{10,64}$/i.test(value) ? `<meta name="facebook-domain-verification" content="${value}" />` : ''
+      return html.replace('<!--meta-domain-verification-->', tag)
+    },
+  }
+}
+
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), tailwindcss(), localWaitlistPlugin(), metaDomainVerification(loadEnv(mode, root, 'VITE_').VITE_META_DOMAIN_VERIFICATION)],
   base: './',
   resolve: { alias: { '@': path.resolve(root, './src') } },
   server: { port: 4310, strictPort: true },
@@ -23,4 +35,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

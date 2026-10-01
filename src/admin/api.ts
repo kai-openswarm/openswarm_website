@@ -6,7 +6,7 @@ import { getSupabase } from './supabase'
 import type {
   AdminSettings, Annotation, Bucket, BreakdownRow, Dimension, EmailReport, Engagement, ExportRow, Funnel, NewAnnotation, Overview,
   Performance, Range, RangeQuery, Realtime, Referrals, SettingKey, SettingValues, SignupsPage, TimeseriesPoint, WelcomeEmail, Whoami,
-  EmailEngagement, EmailKind, PageOverlay, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult,
+  EmailEngagement, EmailKind, ExperimentRow, PageOverlay, EmailPreview, PriorityEmail, SendPendingResult, TestEmailResult,
 } from './types'
 
 export interface AdminApi {
@@ -46,6 +46,7 @@ export interface AdminApi {
   emailReport(r: Range): Promise<EmailReport>
   emailEngagement(r: Range): Promise<EmailEngagement>
   pageOverlay(q: RangeQuery): Promise<PageOverlay>
+  experiments(r: Range): Promise<ExperimentRow[]>
 }
 
 export class ApiError extends Error {
@@ -126,6 +127,7 @@ function createLiveApi(sb: SupabaseClient): AdminApi {
     emailReport: (r) => rpc('admin_email_report', { p_from: r.from, p_to: r.to }),
     emailEngagement: (r) => rpc('admin_email_engagement', { p_from: r.from, p_to: r.to }),
     pageOverlay: (q) => rpc('admin_page_overlay', rq(q)),
+    experiments: (r) => rpc('admin_experiments', { p_from: r.from, p_to: r.to }),
   }
 }
 
