@@ -10,7 +10,7 @@ const SITE = 'https://www.openswarm.com/'
 const Z95 = 1.96
 
 /** 95% Wilson interval for a rate; stays sensible with few visitors. */
-export function wilson(k: number, n: number): [number, number] {
+function wilson(k: number, n: number): [number, number] {
   if (n <= 0) return [0, 0]
   const p = k / n
   const d = 1 + (Z95 * Z95) / n
@@ -27,7 +27,7 @@ function normalCdf(z: number) {
 }
 
 /** Chance the variant's true signup rate is higher than the control's (normal approximation). */
-export function chanceBetter(k: number, n: number, k0: number, n0: number) {
+function chanceBetter(k: number, n: number, k0: number, n0: number) {
   if (n <= 0 || n0 <= 0) return null
   const p = k / n
   const p0 = k0 / n0
@@ -37,7 +37,7 @@ export function chanceBetter(k: number, n: number, k0: number, n0: number) {
 }
 
 /** Visitors each variant needs to detect a 30% relative lift at 95% confidence and 80% power. */
-export function visitorsNeeded(rate: number) {
+function visitorsNeeded(rate: number) {
   if (rate <= 0 || rate >= 1) return null
   const delta = rate * 0.3
   return Math.ceil((2 * (Z95 + 0.84) ** 2 * rate * (1 - rate)) / (delta * delta))
@@ -121,22 +121,41 @@ const SOURCES: Record<string, { utm_source: string, utm_medium: string }> = {
 
 const slug = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
 
+/** A tagged landing link: the variant's headline plus UTM tags for the platform, campaign and ad. */
+function adUrl({ variant, source, campaign, content }: { variant: string, source: string, campaign: string, content: string }) {
+  const params = new URLSearchParams()
+  if (variant !== 'control') params.set(EXPERIMENTS.hero.param, variant)
+  params.set('utm_source', SOURCES[source].utm_source)
+  params.set('utm_medium', SOURCES[source].utm_medium)
+  if (slug(campaign)) params.set('utm_campaign', slug(campaign))
+  params.set('utm_content', slug(content) || variant)
+  return `${SITE}?${params}`
+}
+
+function CopyButton({ text, label }: { text: string, label: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <Button
+      size="sm"
+      onClick={() => {
+        void navigator.clipboard?.writeText(text).then(() => {
+          setCopied(true)
+          window.setTimeout(() => setCopied(false), 1500)
+        })
+      }}
+    >
+      {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />} {copied ? 'Copied' : label}
+    </Button>
+  )
+}
+
 function LinkBuilder() {
   const variants = Object.entries(EXPERIMENTS.hero.variants)
   const [variant, setVariant] = useState('agents')
   const [source, setSource] = useState('meta')
   const [campaign, setCampaign] = useState('launch')
   const [ad, setAd] = useState('')
-  const [copied, setCopied] = useState(false)
-  const url = useMemo(() => {
-    const params = new URLSearchParams()
-    if (variant !== 'control') params.set(EXPERIMENTS.hero.param, variant)
-    params.set('utm_source', SOURCES[source].utm_source)
-    params.set('utm_medium', SOURCES[source].utm_medium)
-    if (slug(campaign)) params.set('utm_campaign', slug(campaign))
-    params.set('utm_content', slug(ad) || variant)
-    return `${SITE}?${params}`
-  }, [variant, source, campaign, ad])
+  const url = adUrl({ variant, source, campaign, content: ad })
   const copy = (variants.find(([name]) => name === variant)?.[1] ?? {}) as { headline?: string, sub?: string }
 
   return (
@@ -162,19 +181,92 @@ function LinkBuilder() {
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <code className="min-w-0 flex-1 rounded-md border border-line px-3 py-2 text-[12.5px] break-all">{url}</code>
-        <Button
-          size="sm"
-          onClick={() => {
-            void navigator.clipboard?.writeText(url).then(() => {
-              setCopied(true)
-              window.setTimeout(() => setCopied(false), 1500)
-            })
-          }}
-        >
-          {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />} {copied ? 'Copied' : 'Copy link'}
-        </Button>
+        <CopyButton text={url} label="Copy link" />
       </div>
       <p className="mt-2 text-[12px] text-ink-3">Meta and X add their own click ids to the link; signups keep them so they can be reported back to the platform.</p>
+    </Panel>
+  )
+}
+
+type BulkRow = { platform: string, variant: string, ad: string, utm_content: string, url: string }
+
+const MAX_BULK = 500
+
+function toggle(list: string[], value: string) {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
+}
+
+function BulkLinkBuilder() {
+  const variantNames = Object.keys(EXPERIMENTS.hero.variants)
+  const [variants, setVariants] = useState<string[]>(variantNames.filter((v) => v !== 'control'))
+  const [platforms, setPlatforms] = useState<string[]>(['meta', 'x'])
+  const [campaign, setCampaign] = useState('launch')
+  const [ads, setAds] = useState('')
+
+  const rows = useMemo(() => {
+    const adNames = [...new Set(ads.split('\n').map((a) => a.trim()).filter(Boolean))]
+    const out: BulkRow[] = []
+    for (const platform of platforms) {
+      for (const variant of variants) {
+        for (const ad of adNames.length ? adNames : ['']) {
+          // The variant is part of utm_content so the same ad name under two headlines stays distinct.
+          const content = ad ? `${variant}_${slug(ad)}` : variant
+          out.push({ platform, variant, ad, utm_content: content, url: adUrl({ variant, source: platform, campaign, content }) })
+        }
+      }
+    }
+    return out
+  }, [platforms, variants, campaign, ads])
+  const shown = rows.slice(0, MAX_BULK)
+  const tsv = ['platform\tvariant\tad\tutm_content\turl', ...shown.map((r) => [r.platform, r.variant, r.ad, r.utm_content, r.url].join('\t'))].join('\n')
+
+  const columns: Column<BulkRow>[] = [
+    { key: 'platform', label: 'Platform', render: (r) => r.platform, sort: (r) => r.platform },
+    { key: 'variant', label: 'Variant', render: (r) => r.variant, sort: (r) => r.variant },
+    { key: 'ad', label: 'Ad', render: (r) => r.ad || <span className="text-ink-3">—</span>, sort: (r) => r.ad },
+    { key: 'url', label: 'Link', render: (r) => <code className="text-[12px] break-all whitespace-normal">{r.url}</code>, csv: (r) => r.url },
+  ]
+
+  return (
+    <Panel
+      title="Bulk ad links"
+      subtitle="Every combination of platform, headline variant and ad name, ready to paste into a spreadsheet or the ads manager's bulk upload."
+      actions={shown.length > 0 && <CopyButton text={tsv} label={`Copy ${shown.length} for spreadsheet`} />}
+    >
+      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_2fr]">
+        <fieldset>
+          <legend className="text-[12px] font-medium text-ink-2">Headline variants</legend>
+          <div className="mt-1.5 flex flex-col gap-1">
+            {variantNames.map((v) => (
+              <label key={v} className="inline-flex items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={variants.includes(v)} onChange={() => setVariants(toggle(variants, v))} /> {v}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend className="text-[12px] font-medium text-ink-2">Platforms</legend>
+          <div className="mt-1.5 flex flex-col gap-1">
+            {Object.keys(SOURCES).map((p) => (
+              <label key={p} className="inline-flex items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={platforms.includes(p)} onChange={() => setPlatforms(toggle(platforms, p))} /> {p}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="flex flex-col gap-3">
+          <Field label="Campaign">{(id) => <input id={id} className={inputClass} value={campaign} onChange={(e) => setCampaign(e.target.value)} placeholder="launch" />}</Field>
+          <Field label="Ad names, one per line (optional)" hint="For example: video 30s, static octopus, carousel apps. Leave empty for one link per variant.">
+            {(id) => <textarea id={id} rows={4} className={`${inputClass} h-auto py-1.5`} value={ads} onChange={(e) => setAds(e.target.value)} />}
+          </Field>
+        </div>
+      </div>
+      <div className="mt-4">
+        {shown.length === 0
+          ? <EmptyState text="Pick at least one variant and one platform" />
+          : <DataTable columns={columns} rows={shown} rowKey={(r) => `${r.platform}|${r.utm_content}`} csvName={`ad-links-${slug(campaign) || 'campaign'}`} caption="Bulk ad links" dense />}
+        {rows.length > MAX_BULK && <p className="mt-2 text-[12px] text-ink-3">Showing the first {MAX_BULK} of {fmtInt(rows.length)} links. Narrow the selection for the rest.</p>}
+      </div>
     </Panel>
   )
 }
@@ -205,6 +297,7 @@ export function ExperimentsPage() {
         {() => <div className="flex flex-col gap-4">{groups.map(([id, rows]) => <ExperimentTable key={id} id={id} rows={rows} />)}</div>}
       </QueryView>
       <LinkBuilder />
+      <BulkLinkBuilder />
     </div>
   )
 }
